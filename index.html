@@ -185,8 +185,23 @@ const LS_REC="advisor_last_record",LS_PROF="advisor_profile",LS_STATS="advisor_s
 let lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
 const picked=new Set();
 
-function lookByTime(){const h=new Date().getHours();if(h>=6&&h<17)return"b";if(h>=17&&h<22)return"a";return"c";}
-function fileFor(role){return role+"_"+lookByTime()+".jpg";}
+function lookByTime(){
+  const h = new Date().getHours();
+  if(h>=6 && h<12) return "office";
+  if(h>=12 && h<18) return "life";
+  return "night";
+}
+function fileFor(role){
+  const IMG = {
+    insight:  { office:"IMG_0230.jpeg", life:"IMG_0184.jpeg", night:"IMG_0235.jpeg" },
+    strategy: { office:"IMG_0231.jpeg", life:"IMG_0185.jpeg", night:"IMG_0236.jpeg" },
+    sales:    { office:"IMG_0232.jpeg", life:"IMG_0186.jpeg", night:"IMG_0237.jpeg" },
+    review:   { office:"IMG_0233.jpeg", life:"IMG_0228.jpeg", night:"IMG_0238.jpeg" },
+    innovate: { office:"IMG_0234.jpeg", life:"IMG_0229.jpeg", night:"IMG_0239.jpeg" }
+  };
+  return IMG[role][lookByTime()];
+}
+
 function photo(r){return '<div class="photo"><img src="'+fileFor(r)+'" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<div class=&quot;emoji&quot;>'+EMOJI[r]+'</div>\')"><span class="cap">'+NAMES[r]+'</span></div>';}
 function esc(t){return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");}
 function showErr(where,msg){var el=document.getElementById(where);if(el)el.innerHTML='<div class="err">❌ '+String(msg).replace(/</g,"&lt;")+'</div>';}
