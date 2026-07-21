@@ -1,162 +1,316 @@
-<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"><title>AI 顧問團</title><style>
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#1a1030">
+<title>三寶爸・美女顧問團</title>
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22%E7%BE%8E%E5%A5%B3%E9%A1%A7%E5%95%8F%E5%9C%98%22%2C%22short_name%22%3A%22%E9%A1%A7%E5%95%8F%E5%9C%98%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%231a1030%22%2C%22theme_color%22%3A%22%231a1030%22%2C%22start_url%22%3A%22.%22%7D">
+<style>
 :root{--gold:#e8c267;--gold-lt:#f5dea0;--gold-dk:#b8923a;--ink:#ece4f5;--ink-soft:#bca9d8;--purple:#6b4ba8;--purple-lt:#a98bd8;--bubble:#251841;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
-body{font-family:-apple-system,"PingFang TC",sans-serif;color:var(--ink);line-height:1.7;background:radial-gradient(120% 80% at 80% 0%,rgba(232,194,103,.10),transparent 50%),radial-gradient(100% 60% at 10% 10%,rgba(169,139,216,.18),transparent 55%),linear-gradient(160deg,#1a1030,#241640 45%,#1c1233);background-attachment:fixed;min-height:100vh;padding:max(8px,env(safe-area-inset-top)) 14px calc(78px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;position:relative;overflow-x:hidden;}
+body{font-family:-apple-system,"PingFang TC",sans-serif;color:var(--ink);line-height:1.7;
+background:radial-gradient(120% 80% at 80% 0%,rgba(232,194,103,.12),transparent 50%),radial-gradient(100% 60% at 10% 10%,rgba(169,139,216,.18),transparent 55%),linear-gradient(160deg,#1a1030,#241640 45%,#1c1233);
+background-attachment:fixed;min-height:100vh;max-width:680px;margin:0 auto;position:relative;overflow-x:hidden;
+padding:max(8px,env(safe-area-inset-top)) 13px calc(84px + env(safe-area-inset-bottom));}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(1.5px 1.5px at 20% 30%,rgba(245,222,160,.6),transparent),radial-gradient(1px 1px at 70% 20%,rgba(245,222,160,.5),transparent),radial-gradient(1.5px 1.5px at 85% 60%,rgba(169,139,216,.5),transparent),radial-gradient(1px 1px at 40% 80%,rgba(245,222,160,.4),transparent);background-repeat:no-repeat;}
 .wrap{position:relative;z-index:1;}
-.deco{text-align:center;color:var(--gold-dk);font-size:.7rem;margin:8px 0 14px;letter-spacing:.3em;}
+.deco{text-align:center;color:var(--gold-dk);font-size:.72rem;letter-spacing:.35em;margin:8px 0 12px;}
+/* header */
 .header{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
-.crest{width:60px;height:60px;border-radius:50%;flex-shrink:0;overflow:hidden;border:2px solid var(--gold);box-shadow:0 0 16px rgba(232,194,103,.4);display:flex;align-items:center;justify-content:center;font-size:30px;background:#3a2960;}
-.crest img{width:100%;height:100%;object-fit:cover;}
-.title h1{font-size:1.5rem;font-weight:800;letter-spacing:.04em;background:linear-gradient(180deg,var(--gold-lt),var(--gold) 60%,var(--gold-dk));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.2;}
-.title .roles{font-size:.78rem;color:var(--purple-lt);letter-spacing:.06em;margin-top:2px;}
-.panel{background:linear-gradient(160deg,rgba(44,31,77,.92),rgba(30,20,56,.92));border-radius:18px;padding:16px;margin-bottom:16px;box-shadow:0 0 0 1px rgba(232,194,103,.25),0 8px 30px rgba(0,0,0,.4);position:relative;}
+.crest{width:58px;height:58px;border-radius:50%;flex-shrink:0;overflow:hidden;border:2px solid var(--gold);box-shadow:0 0 16px rgba(232,194,103,.4);display:flex;align-items:center;justify-content:center;font-size:28px;background:radial-gradient(circle,#5a3da0,#2c1f4d);}
+.title h1{font-size:1.5rem;font-weight:800;letter-spacing:.03em;background:linear-gradient(180deg,var(--gold-lt),var(--gold) 60%,var(--gold-dk));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.15;}
+.title .roles{font-size:.76rem;color:var(--purple-lt);letter-spacing:.05em;margin-top:2px;}
+/* 五顧問陣容列 */
+.lineup{display:flex;gap:8px;justify-content:space-between;margin:0 0 14px;}
+.lineup .m{flex:1;text-align:center;}
+.lineup .av{width:100%;aspect-ratio:3/4;border-radius:11px;overflow:hidden;border:1.5px solid var(--gold);box-shadow:0 0 12px rgba(232,194,103,.3);background:radial-gradient(circle,#3a2960,#241640);position:relative;}
+.lineup .av img{width:100%;height:100%;object-fit:cover;display:block;}
+.lineup .av .em{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:26px;}
+.lineup .nm{font-size:.64rem;color:var(--gold-lt);margin-top:3px;line-height:1.2;}
+.lineup .nm small{display:block;color:var(--purple-lt);font-size:.58rem;}
+/* tabs */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;-webkit-overflow-scrolling:touch;}
+.tabs::-webkit-scrollbar{display:none;}
+.tabs button{flex:0 0 auto;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 13px;font-size:.8rem;color:var(--ink);white-space:nowrap;}
+.tabs button.active{background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-weight:800;border-color:var(--gold);box-shadow:0 0 12px rgba(232,194,103,.4);}
+.page{display:none;} .page.show{display:block;}
+/* panel 金框 */
+.panel{background:linear-gradient(160deg,rgba(44,31,77,.92),rgba(30,20,56,.92));border-radius:18px;padding:15px;margin-bottom:14px;position:relative;box-shadow:0 8px 26px rgba(0,0,0,.4);}
 .panel::before{content:"";position:absolute;inset:0;border-radius:18px;padding:1.5px;background:linear-gradient(135deg,rgba(232,194,103,.6),transparent 40%,transparent 60%,rgba(232,194,103,.4));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;}
-.taskbox{width:100%;min-height:48px;resize:vertical;font-family:inherit;background:rgba(20,13,38,.7);border:1px solid rgba(169,139,216,.3);border-radius:12px;padding:13px 14px;font-size:1.05rem;color:var(--ink);font-weight:600;}
-.quick{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
-.quick button{display:flex;align-items:center;gap:5px;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:20px;padding:8px 14px;font-size:.8rem;color:var(--ink);}
-.run{width:100%;border:none;border-radius:13px;padding:16px;font-size:1.1rem;font-weight:800;color:#3a2400;letter-spacing:.05em;background:linear-gradient(180deg,var(--gold-lt),var(--gold) 55%,var(--gold-dk));box-shadow:0 0 20px rgba(232,194,103,.45),inset 0 1px 2px rgba(255,255,255,.5);}
-.run:disabled{filter:saturate(.5) brightness(.8);}
-.profbar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(160deg,rgba(44,31,77,.9),rgba(30,20,56,.9));border:1px solid rgba(232,194,103,.35);border-radius:14px;padding:10px 14px;margin-bottom:14px;font-size:.85rem;color:var(--ink-soft);}
-.profbar b{color:var(--gold-lt);font-weight:700;}
-.profbar button{background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:7px 14px;font-size:.8rem;color:var(--ink);white-space:nowrap;}
-.field{margin-bottom:11px;}
-.field label{display:block;font-size:.82rem;color:var(--gold-lt);margin-bottom:5px;}
-.field input,.field textarea,.field select{width:100%;background:rgba(20,13,38,.7);border:1px solid rgba(169,139,216,.3);border-radius:10px;padding:11px 12px;font-size:15px;color:var(--ink);font-family:inherit;resize:vertical;}
-.field textarea{min-height:44px;}
-.saveprof{width:100%;border:none;border-radius:12px;padding:14px;font-size:1rem;font-weight:800;color:#3a2400;background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));margin-top:6px;}
-.hcard{background:linear-gradient(160deg,rgba(58,42,26,.6),rgba(44,31,18,.6));border:1px solid var(--gold-dk);border-radius:14px;padding:13px;margin-bottom:14px;}
-.htit{font-size:.85rem;color:var(--gold-lt);font-weight:700;margin-bottom:6px;}
-.hsum{font-size:.85rem;color:var(--ink-soft);white-space:pre-wrap;background:rgba(20,13,38,.5);border-radius:8px;padding:9px;margin-bottom:9px;}
-.hlbl{font-size:.78rem;color:var(--gold-lt);margin-bottom:5px;}
-.fb{width:100%;min-height:46px;background:rgba(20,13,38,.7);border:1px solid rgba(169,139,216,.3);border-radius:10px;padding:10px;font-size:15px;color:var(--ink);font-family:inherit;resize:vertical;}
-.clearrec{margin-top:8px;background:none;border:1px solid var(--purple);color:var(--ink-soft);border-radius:8px;padding:5px 12px;font-size:.72rem;}
-.ceobar{display:flex;align-items:center;gap:10px;background:linear-gradient(160deg,rgba(44,31,77,.9),rgba(30,20,56,.9));border:1px solid rgba(232,194,103,.35);border-radius:14px;padding:10px 14px;margin-bottom:14px;font-size:.85rem;color:var(--ink-soft);}
-.crown{color:var(--gold);font-size:1.1rem;}
+.lbl{font-size:.82rem;color:var(--gold-lt);margin-bottom:6px;display:block;}
+textarea,input,select{width:100%;background:rgba(20,13,38,.7);border:1px solid rgba(169,139,216,.3);border-radius:11px;padding:12px 13px;font-size:15px;color:var(--ink);font-family:inherit;resize:vertical;}
+textarea{min-height:48px;font-weight:600;}
+.btn{width:100%;border:none;border-radius:13px;padding:15px;font-size:1.08rem;font-weight:800;color:#3a2400;letter-spacing:.04em;background:linear-gradient(180deg,var(--gold-lt),var(--gold) 55%,var(--gold-dk));box-shadow:0 0 20px rgba(232,194,103,.45),inset 0 1px 2px rgba(255,255,255,.5);margin-top:11px;}
+.btn:disabled{filter:saturate(.5) brightness(.8);}
+.btn2{background:linear-gradient(160deg,#3a2960,#241640);color:var(--gold-lt);border:1.5px solid var(--gold);box-shadow:0 0 14px rgba(232,194,103,.22);}
+.quick{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0;}
+.quick button{display:flex;align-items:center;gap:4px;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:20px;padding:8px 13px;font-size:.78rem;color:var(--ink);}
+/* 顧問卡 照片在左 */
 .advisor{display:flex;gap:11px;margin:14px 0;opacity:0;transform:translateY(10px);transition:.45s;}
 .advisor.show{opacity:1;transform:none;}
-.photo{width:96px;flex-shrink:0;border-radius:12px;overflow:hidden;position:relative;border:2px solid var(--gold);box-shadow:0 0 14px rgba(232,194,103,.3);background:#3a2960;}
+.photo{width:96px;flex-shrink:0;border-radius:12px;overflow:hidden;position:relative;border:2px solid var(--gold);box-shadow:0 0 14px rgba(232,194,103,.3);background:radial-gradient(circle,#3a2960,#241640);}
 .photo img{width:100%;height:128px;object-fit:cover;display:block;}
-.photo .emoji{height:128px;display:flex;align-items:center;justify-content:center;font-size:46px;}
-.photo .cap{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:.72rem;color:var(--gold-lt);background:linear-gradient(transparent,rgba(20,13,38,.95));padding:14px 0 4px;}
+.photo .emoji{height:128px;display:flex;align-items:center;justify-content:center;font-size:44px;}
+.photo .cap{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:.7rem;color:var(--gold-lt);background:linear-gradient(transparent,rgba(20,13,38,.95));padding:14px 0 4px;}
 .bw{flex:1;min-width:0;}
-.who{font-size:.95rem;font-weight:700;color:var(--gold-lt);margin:2px 0 5px;}
-.who small{color:var(--purple-lt);font-weight:400;font-size:.74rem;}
-.bubble{background:var(--bubble);border:1px solid rgba(169,139,216,.25);border-radius:6px 14px 14px 14px;padding:12px 14px;font-size:.93rem;white-space:pre-wrap;box-shadow:0 4px 14px rgba(0,0,0,.3);}
+.who{font-size:.94rem;font-weight:700;color:var(--gold-lt);margin:2px 0 5px;}
+.who small{color:var(--purple-lt);font-weight:400;font-size:.72rem;}
+.bubble{background:var(--bubble);border:1px solid rgba(169,139,216,.25);border-radius:6px 14px 14px 14px;padding:12px 14px;font-size:.92rem;white-space:pre-wrap;box-shadow:0 4px 14px rgba(0,0,0,.3);}
 .deep .bubble{background:linear-gradient(160deg,#3a2a1a,#2c1f12);border-color:var(--gold-dk);border-left:3px solid var(--gold);}
-.pick{margin-top:8px;display:flex;align-items:center;gap:7px;font-size:.8rem;color:var(--ink-soft);}
+.pick{margin-top:8px;display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--ink-soft);}
 .pick input{width:18px;height:18px;accent-color:var(--gold-dk);}
-.copy{margin-top:8px;background:rgba(20,13,38,.6);border:1px solid var(--purple);border-radius:8px;padding:6px 13px;font-size:.76rem;color:var(--ink-soft);}
-.deepbtn{width:100%;border:none;border-radius:13px;padding:15px;font-size:1.02rem;font-weight:800;color:var(--gold-lt);background:linear-gradient(160deg,#3a2960,#241640);border:1.5px solid var(--gold);margin:14px 0;box-shadow:0 0 16px rgba(232,194,103,.25);}
-.deepbtn:disabled{filter:brightness(.7);color:var(--ink-soft);border-color:var(--purple);}
-.savebtn{width:100%;border:none;border-radius:13px;padding:14px;font-size:.98rem;font-weight:700;color:#3a2400;background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));margin:14px 0;}
-.savebtn:disabled{filter:brightness(.85);}
-.deephdr{text-align:center;font-size:.9rem;color:var(--gold-lt);letter-spacing:.1em;margin:16px 0 4px;font-weight:700;}
-.pickhint{text-align:center;font-size:.78rem;color:var(--ink-soft);margin:4px 0;}
-.statusline{text-align:center;font-size:.85rem;color:var(--purple-lt);padding:12px;}
-.err{background:rgba(120,30,30,.5);border:1px solid #c0506a;color:#ffd0d0;padding:12px;border-radius:10px;font-size:.85rem;}
-.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:flex-end;justify-content:space-around;background:linear-gradient(180deg,rgba(30,20,56,.7),rgba(20,13,38,.98));border-top:1px solid rgba(232,194,103,.25);padding:8px 6px calc(8px + env(safe-area-inset-bottom));backdrop-filter:blur(10px);max-width:680px;margin:0 auto;}
-.nav button{background:none;border:none;color:var(--ink-soft);font-size:.68rem;display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:2px;}
+.copy{margin-top:8px;background:rgba(20,13,38,.6);border:1px solid var(--purple);border-radius:8px;padding:6px 13px;font-size:.75rem;color:var(--ink-soft);}
+.out{background:linear-gradient(160deg,rgba(58,42,26,.5),rgba(44,31,18,.5));border:1px solid var(--gold-dk);border-left:3px solid var(--gold);border-radius:12px;padding:13px;font-size:.92rem;white-space:pre-wrap;margin-top:11px;}
+.status{text-align:center;font-size:.85rem;color:var(--purple-lt);padding:12px;}
+.err{background:rgba(120,30,30,.55);border:1px solid #c0506a;color:#ffd0d0;padding:12px;border-radius:10px;font-size:.83rem;white-space:pre-wrap;margin-top:9px;}
+.ceobar{display:flex;align-items:center;gap:9px;background:linear-gradient(160deg,rgba(44,31,77,.9),rgba(30,20,56,.9));border:1px solid rgba(232,194,103,.35);border-radius:14px;padding:11px 14px;margin-bottom:12px;font-size:.84rem;color:var(--ink-soft);}
+.crown{color:var(--gold);font-size:1.05rem;}
+.hint{font-size:.75rem;color:var(--ink-soft);margin:7px 0;}
+.chrow{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0;}
+.chrow button{flex:1;min-width:70px;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:11px;padding:10px;font-size:.8rem;color:var(--ink);}
+.chrow button.on{background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-weight:800;}
+.small{font-size:.75rem;color:var(--ink-soft);}
+input[type=file]{padding:10px;font-size:.85rem;}
+/* 底部導覽 */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:flex-end;justify-content:space-around;background:linear-gradient(180deg,rgba(30,20,56,.7),rgba(20,13,38,.98));border-top:1px solid rgba(232,194,103,.25);padding:8px 4px calc(8px + env(safe-area-inset-bottom));backdrop-filter:blur(10px);max-width:680px;margin:0 auto;}
+.nav button{background:none;border:none;color:var(--ink-soft);font-size:.62rem;display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:2px;}
 .nav button.active{color:var(--gold-lt);}
-.nav .ic{font-size:1.15rem;}
-.nav .center{margin-top:-22px;}
-.nav .center .ic{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,#5a3da0,#2c1f4d);border:2px solid var(--gold);box-shadow:0 0 18px rgba(232,194,103,.5);font-size:1.5rem;}
-</style></head><body><div class="wrap"><div class="deco">✦ ❖ ✦</div><div class="header"><div class="crest" id="crest">👑</div><div class="title"><h1>AI 顧問團</h1><div class="roles">洞察官・策略官・業務官・把關官・創新官</div></div></div>
-
-<div class="profbar"><div id="profStatus">尚未設定產品</div><button onclick="openProf()">⚙️ 設定我的產品</button></div>
-
-<div class="panel" id="profPanel" style="display:none">
-  <div class="field"><label>產品／服務名稱</label><input id="p_name" placeholder="例：脆皮烤豬"></div>
-  <div class="field"><label>一句話特色</label><input id="p_feature" placeholder="例：手工現做、外脆內嫩"></div>
-  <div class="field"><label>價格資訊</label><textarea id="p_price" placeholder="例：一條450，3條免運"></textarea></div>
-  <div class="field"><label>目標客群</label><input id="p_audience" placeholder="例：基隆在地、重視新鮮的家庭"></div>
-  <div class="field"><label>聯絡方式</label><input id="p_contact" placeholder="例：LINE https://lin.ee/xxxx"></div>
-  <div class="field"><label>產業類型</label>
-    <select id="p_industry">
-      <option value="">請選擇</option>
-      <option>食品/餐飲</option>
-      <option>電商/零售</option>
-      <option>服務/接案</option>
-      <option>數位工具/App</option>
-      <option>命理/身心靈</option>
-      <option>教育/課程</option>
-      <option>其他</option>
-    </select>
-  </div>
-  <button class="saveprof" onclick="saveProf()">💾 儲存產品資料</button>
+.nav .ic{font-size:1.1rem;}
+</style></head><body><div class="wrap">
+<div class="deco">✦ ❖ ✦</div>
+<div class="header">
+  <div class="crest">👑</div>
+  <div class="title"><h1>三寶爸・美女顧問團</h1><div class="roles">洞察・策略・業務・把關・創新</div></div>
 </div>
 
-<div id="handoff"></div><div class="panel"><textarea class="taskbox" id="task" placeholder="想跟顧問團討論什麼？例如：這週末出攤，想一篇貼文"></textarea><div class="quick"><button onclick="setT('這週末想發一篇銷售貼文')">✍️ 發文</button><button onclick="setT('幫我回客人的疑問')">💬 回答人</button><button onclick="setT('這個月該推什麼')">📈 推廣</button><button onclick="setT('快到節慶了該推什麼')">🌙 節慶檔期</button></div><button class="run" id="run" onclick="stage1()">找顧問團開會 ▶</button></div><div id="status"></div><div id="opin"></div><div id="deepwrap"></div></div><nav class="nav"><button class="active"><span class="ic">👥</span>顧問團</button><button onclick="soon()"><span class="ic">📖</span>開會紀錄</button><button class="center"><span class="ic">✸</span></button><button onclick="soon()"><span class="ic">📋</span>我的提案</button><button onclick="openProf()"><span class="ic">⚙️</span>設定</button></nav><script>
-const WORKER_URL = "https://sales-team.rhtm9y855y.workers.dev";
-const NAMES={"insight": "林若曦", "strategy": "沈墨嫻", "sales": "陳沁柔", "review": "蘇清岩", "innovate": "江星瑤"}, TITLES={"insight": "洞察官", "strategy": "策略官", "sales": "業務官", "review": "把關官", "innovate": "創新官"}, EMOJI={"insight": "👩‍💼", "strategy": "💁‍♀️", "sales": "🙋‍♀️", "review": "👩‍🏫", "innovate": "👩‍🎤"};
-const FILES={insight:"insight.jpg",strategy:"strategy.jpg",sales:"sales.jpg",review:"review.jpg",innovate:"innovate.jpg"};
-const LS_KEY="advisor_last_record", PROF_KEY="advisor_profile";
-let lastTask="",lastOpinions=[],lastReports=[];
+<!-- 五顧問陣容（依時間換造型） -->
+<div class="lineup" id="lineup"></div>
+
+<!-- tabs -->
+<div class="tabs" id="tabs">
+  <button data-p="meet" class="active">🗣️ 開會</button>
+  <button data-p="content">🧭 內容官</button>
+  <button data-p="execute">✍️ 執行官</button>
+  <button data-p="stats">📊 讀成效</button>
+  <button data-p="reply">💬 客人對話</button>
+  <button data-p="record">📈 成效紀錄</button>
+  <button data-p="profile">⚙️ 我的產品</button>
+</div>
+
+<!-- 開會 -->
+<div class="page show" id="p_meet">
+  <div id="handoff"></div>
+  <div class="panel">
+    <textarea id="task" placeholder="想跟顧問團討論什麼？例如：推天衡，要狂一點的新方向"></textarea>
+    <div class="quick">
+      <button onclick="setT('這週末想發一篇銷售貼文')">✍️ 發文</button>
+      <button onclick="setT('幫我想這個月的推廣方向')">📈 推廣</button>
+      <button onclick="setT('快到節慶了該推什麼')">🌙 節慶</button>
+    </div>
+    <label class="small"><input type="checkbox" id="useCEO" checked style="width:auto;margin-right:5px"> CEO 智慧派工（省 API）</label>
+    <button class="btn" id="runMeet" onclick="stage1()">找顧問團開會 ▶</button>
+  </div>
+  <div id="meetStatus"></div><div id="opin"></div><div id="deepwrap"></div><div id="reviewwrap"></div>
+</div>
+
+<!-- 內容官 -->
+<div class="page" id="p_content"><div class="panel">
+  <label class="lbl">🧭 這題該拍片還是發文？上哪個平台？</label>
+  <textarea id="contentTask" placeholder="例如：想推天衡命理工具給新用戶"></textarea>
+  <button class="btn" id="runContent" onclick="doContent()">問內容官佈局 ▶</button>
+  <div class="hint">懂各平台原理＋你的實戰數據（故事類最強），給你形式、平台、角度、時段。</div>
+</div><div id="contentOut"></div></div>
+
+<!-- 執行官 -->
+<div class="page" id="p_execute"><div class="panel">
+  <label class="lbl">✍️ 要產出什麼內容？</label>
+  <textarea id="execTask" placeholder="例如：中秋烤肉檔期，主打家庭聚餐"></textarea>
+  <label class="lbl" style="margin-top:9px">產出形式</label>
+  <div class="chrow" id="chrow">
+    <button data-ch="fb" class="on">FB 貼文</button><button data-ch="thread">Threads</button>
+    <button data-ch="video">短影音腳本</button><button data-ch="line">LINE 訊息</button>
+  </div>
+  <button class="btn" id="runExec" onclick="doExecute()">執行官產出成品 ▶</button>
+  <div class="hint">產出可直接複製貼上就發的成品。剛開完會會自動參考顧問方向。</div>
+</div><div id="execOut"></div></div>
+
+<!-- 讀成效 -->
+<div class="page" id="p_stats"><div class="panel">
+  <label class="lbl">📊 上傳 FB 後台/貼文截圖，自動讀成效</label>
+  <input type="file" accept="image/*" id="statsFile" onchange="doStats(event)">
+  <div class="hint">讀出讚數、留言數、瀏覽/觸及與重點留言。圖片只讀不存，只留數字結果。</div>
+</div><div id="statsOut"></div></div>
+
+<!-- 客人對話 -->
+<div class="page" id="p_reply"><div class="panel">
+  <label class="lbl">💬 上傳與客人的對話截圖，業務官幫你擬回覆</label>
+  <input type="file" accept="image/*" id="replyFile" onchange="doReply(event)">
+  <div class="hint">業務官讀懂客人想要什麼，用你的口氣擬一則可直接複製傳出的回覆。圖片只讀不存。</div>
+</div><div id="replyOut"></div></div>
+
+<!-- 成效紀錄 -->
+<div class="page" id="p_record"><div class="panel">
+  <label class="lbl">📈 歷史成效紀錄（存本機，開會時顧問參考）</label>
+  <div id="recordList" class="small"></div>
+  <button class="btn btn2" onclick="clearRecords()">清除所有成效紀錄</button>
+</div></div>
+
+<!-- 我的產品 -->
+<div class="page" id="p_profile"><div class="panel">
+  <label class="lbl">產品／服務名稱</label><input id="p_name" placeholder="例：脆皮烤豬">
+  <label class="lbl" style="margin-top:9px">一句話特色</label><input id="p_feature" placeholder="例：手工現做、外脆內嫩">
+  <label class="lbl" style="margin-top:9px">價格資訊</label><textarea id="p_price" placeholder="例：一條450，3條免運"></textarea>
+  <label class="lbl" style="margin-top:9px">目標客群</label><input id="p_audience" placeholder="例：基隆在地、重視新鮮的家庭">
+  <label class="lbl" style="margin-top:9px">聯絡方式</label><input id="p_contact" placeholder="例：LINE https://lin.ee/xxxx">
+  <label class="lbl" style="margin-top:9px">產業類型</label>
+  <select id="p_industry"><option value="">請選擇</option><option>食品/餐飲</option><option>電商/零售</option><option>服務/接案</option><option>數位工具/App</option><option>命理/身心靈</option><option>教育/課程</option><option>其他</option></select>
+  <button class="btn" onclick="saveProf()">💾 儲存產品資料</button>
+  <div id="profMsg" class="hint"></div>
+</div></div>
+
+</div>
+<nav class="nav" id="navbar">
+  <button data-p="meet" class="active"><span class="ic">👥</span>顧問團</button>
+  <button data-p="execute"><span class="ic">✍️</span>執行</button>
+  <button data-p="stats"><span class="ic">📊</span>成效</button>
+  <button data-p="reply"><span class="ic">💬</span>回客人</button>
+  <button data-p="profile"><span class="ic">⚙️</span>設定</button>
+</nav>
+
+<script>
+const WORKER_URL="https://sales-team.rhtm9y855y.workers.dev";
+const NAMES={insight:"林若曦",strategy:"沈墨嫻",sales:"陳沁柔",review:"蘇清岩",innovate:"江星瑤"};
+const TITLES={insight:"洞察官",strategy:"策略官",sales:"業務官",review:"把關官",innovate:"創新官"};
+const EMOJI={insight:"👩‍💼",strategy:"💁‍♀️",sales:"🙋‍♀️",review:"👩‍🏫",innovate:"👩‍🎤"};
+const ORDER=["insight","strategy","sales","review","innovate"];
+const LS_REC="advisor_last_record",LS_PROF="advisor_profile",LS_STATS="advisor_stats_log";
+let lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
 const picked=new Set();
+
+function lookByTime(){const h=new Date().getHours();if(h>=6&&h<17)return"b";if(h>=17&&h<22)return"a";return"c";}
+function fileFor(role){return role+"_"+lookByTime()+".jpg";}
+function photo(r){return '<div class="photo"><img src="'+fileFor(r)+'" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<div class=&quot;emoji&quot;>'+EMOJI[r]+'</div>\')"><span class="cap">'+NAMES[r]+'</span></div>';}
+function esc(t){return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");}
+function showErr(where,msg){var el=document.getElementById(where);if(el)el.innerHTML='<div class="err">❌ '+String(msg).replace(/</g,"&lt;")+'</div>';}
+
+// 五顧問陣容列
+function renderLineup(){
+  document.getElementById("lineup").innerHTML=ORDER.map(r=>
+    '<div class="m"><div class="av"><img src="'+fileFor(r)+'" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<div class=&quot;em&quot;>'+EMOJI[r]+'</div>\')"></div><div class="nm">'+NAMES[r]+'<small>'+TITLES[r]+'</small></div></div>'
+  ).join("");
+}
+
+// 分頁
+function switchTo(p){
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("active",x.dataset.p===p));
+  document.querySelectorAll("#navbar button").forEach(x=>x.classList.toggle("active",x.dataset.p===p));
+  document.querySelectorAll(".page").forEach(x=>x.classList.remove("show"));
+  document.getElementById("p_"+p).classList.add("show");
+  if(p==="record")renderRecords();
+  window.scrollTo(0,0);
+}
+document.getElementById("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)switchTo(b.dataset.p);});
+document.getElementById("navbar").addEventListener("click",function(e){var b=e.target.closest("button");if(b)switchTo(b.dataset.p);});
+document.getElementById("chrow").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;document.querySelectorAll("#chrow button").forEach(x=>x.classList.remove("on"));b.classList.add("on");execChannel=b.dataset.ch;});
+
 function setT(t){document.getElementById("task").value=t;}
-function soon(){document.getElementById("status").innerHTML='<div class="statusline">這個功能之後開放 ✨</div>';}
-function getRecord(){try{const r=localStorage.getItem(LS_KEY);return r?JSON.parse(r):null;}catch(e){return null;}}
-function saveRecord(rec){try{localStorage.setItem(LS_KEY,JSON.stringify(rec));}catch(e){}}
-function getProfile(){try{const r=localStorage.getItem(PROF_KEY);return r?JSON.parse(r):null;}catch(e){return null;}}
-function renderProfStatus(){const p=getProfile();const el=document.getElementById("profStatus");if(p&&p.name){el.innerHTML='目前產品：<b>'+p.name.replace(/</g,"&lt;")+'</b>';}else{el.textContent="尚未設定產品（顧問只能給通用方向）";}}
-function openProf(){const panel=document.getElementById("profPanel");const p=getProfile()||{};document.getElementById("p_name").value=p.name||"";document.getElementById("p_feature").value=p.feature||"";document.getElementById("p_price").value=p.price||"";document.getElementById("p_audience").value=p.audience||"";document.getElementById("p_contact").value=p.contact||"";document.getElementById("p_industry").value=p.industry||"";panel.style.display=panel.style.display==="none"?"block":"none";if(panel.style.display==="block")panel.scrollIntoView({behavior:"smooth"});}
-function saveProf(){const p={name:document.getElementById("p_name").value.trim(),feature:document.getElementById("p_feature").value.trim(),price:document.getElementById("p_price").value.trim(),audience:document.getElementById("p_audience").value.trim(),contact:document.getElementById("p_contact").value.trim(),industry:document.getElementById("p_industry").value.trim()};try{localStorage.setItem(PROF_KEY,JSON.stringify(p));}catch(e){}renderProfStatus();document.getElementById("profPanel").style.display="none";document.getElementById("status").innerHTML='<div class="statusline">✅ 產品資料已儲存</div>';}
-function photo(r){return '<div class="photo"><img src="'+FILES[r]+'" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<div class=&quot;emoji&quot;>'+EMOJI[r]+'</div>\')"><span class="cap">'+NAMES[r]+'</span></div>';}
-function checkURL(){if(WORKER_URL.includes("你的worker")){document.getElementById("status").innerHTML='<div class="err">⚠️ 還沒設定 Worker 網址。打開 index.html 把 WORKER_URL 換成你的 workers.dev 網址。</div>';return false;}return true;}
-async function callAPI(path,payload){const resp=await fetch(WORKER_URL.replace(/\/$/,"")+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await resp.json();if(data.error)throw new Error(data.error);return data;}
-function renderHandoff(){
-  const rec=getRecord();const box=document.getElementById("handoff");
-  if(!rec){box.innerHTML="";return;}
-  box.innerHTML='<div class="hcard"><div class="htit">📋 上次開會交接（'+(rec.date||"")+'）</div><div class="hsum">'+rec.summary.replace(/</g,"&lt;")+'</div><div class="hlbl">上次方案做了嗎？效果如何？（顧問會根據這個複盤）</div><textarea id="feedback" class="fb" placeholder="例如：貼文發了，30個讚但只有2人點連結"></textarea><button class="clearrec" onclick="clearRec()">清除這筆記錄</button></div>';
+function v(id){return document.getElementById(id).value.trim();}
+function getProfile(){try{var r=localStorage.getItem(LS_PROF);return r?JSON.parse(r):null;}catch(e){return null;}}
+function getRecord(){try{var r=localStorage.getItem(LS_REC);return r?JSON.parse(r):null;}catch(e){return null;}}
+function saveRecord(rec){try{localStorage.setItem(LS_REC,JSON.stringify(rec));}catch(e){}}
+function getStatsLog(){try{var r=localStorage.getItem(LS_STATS);return r?JSON.parse(r):[];}catch(e){return[];}}
+function pushStats(rec){var a=getStatsLog();a.unshift(rec);if(a.length>50)a.length=50;try{localStorage.setItem(LS_STATS,JSON.stringify(a));}catch(e){}}
+
+async function callAPI(path,payload){
+  var resp=await fetch(WORKER_URL.replace(/\/$/,"")+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  var data=await resp.json();if(data.error)throw new Error(data.error);return data;
 }
-function clearRec(){try{localStorage.removeItem(LS_KEY);}catch(e){}renderHandoff();}
+function checkURL(where){if(WORKER_URL.includes("你的worker")){showErr(where,"還沒設定 Worker 網址");return false;}return true;}
+
+// 產品
+function saveProf(){var p={name:v("p_name"),feature:v("p_feature"),price:v("p_price"),audience:v("p_audience"),contact:v("p_contact"),industry:v("p_industry")};try{localStorage.setItem(LS_PROF,JSON.stringify(p));}catch(e){}document.getElementById("profMsg").textContent="✅ 已儲存";}
+function loadProf(){var p=getProfile();if(!p)return;["name","feature","price","audience","contact","industry"].forEach(k=>{var el=document.getElementById("p_"+k);if(el&&p[k])el.value=p[k];});}
+
+// 開會
+function renderHandoff(){var rec=getRecord();var box=document.getElementById("handoff");if(!rec){box.innerHTML="";return;}box.innerHTML='<div class="panel"><div class="lbl">📋 上次交接（'+(rec.date||"")+'）</div><div class="out">'+esc(rec.summary)+'</div><label class="lbl" style="margin-top:8px">上次方案效果如何？</label><textarea id="feedback" placeholder="例：貼文30讚但只2人點連結"></textarea></div>';}
 async function stage1(){
-  if(!checkURL())return;
-  const task=document.getElementById("task").value.trim();
-  if(!task){document.getElementById("status").innerHTML='<div class="statusline">想跟顧問團說點什麼呢 🙂</div>';return;}
-  lastTask=task;picked.clear();lastReports=[];
-  const run=document.getElementById("run"),s=document.getElementById("status"),o=document.getElementById("opin");
-  document.getElementById("deepwrap").innerHTML="";o.innerHTML="";run.disabled=true;
-  s.innerHTML='<div class="ceobar"><span class="crown">♛</span> CEO 派出 5 位顧問開會中…（約 20~40 秒）</div>';
-  const rec=getRecord();const fbEl=document.getElementById("feedback");const feedback=fbEl?fbEl.value.trim():"";
-  const profile=getProfile();
+  if(!checkURL("meetStatus"))return;
+  var task=v("task");if(!task){document.getElementById("meetStatus").innerHTML='<div class="status">想討論什麼呢 🙂</div>';return;}
+  lastTask=task;picked.clear();lastReports=[];reviewTries=0;
+  document.getElementById("deepwrap").innerHTML="";document.getElementById("reviewwrap").innerHTML="";
+  var o=document.getElementById("opin");o.innerHTML="";
+  var run=document.getElementById("runMeet");run.disabled=true;
+  document.getElementById("meetStatus").innerHTML='<div class="ceobar"><span class="crown">♛</span> CEO 派顧問開會中…（約 20~40 秒）</div>';
+  var fbEl=document.getElementById("feedback");
   try{
-    const data=await callAPI("/opinions",{task,today:new Date().toISOString().slice(0,10),profile,lastRecord:rec,feedback});
-    lastOpinions=data.opinions;o.innerHTML="";
-    let i=0;(function nx(){
-      if(i>=data.opinions.length){showDeepBtn();run.disabled=false;return;}
-      const t=data.opinions[i];const safe=(t.output||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
-      const m=document.createElement("div");m.className="advisor";
-      m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'</small></div><div class="bubble">'+safe+'</div><label class="pick"><input type="checkbox" onchange="tog(\''+t.role+'\',this)"> 選她做深度報告</label></div>';
-      o.appendChild(m);setTimeout(()=>m.classList.add("show"),30);i++;setTimeout(nx,250);
-    })();
-  }catch(e){s.innerHTML='<div class="err">❌ 出錯了：'+String(e.message||e)+'</div>';run.disabled=false;}
+    var data=await callAPI("/opinions",{task:task,today:new Date().toISOString().slice(0,10),profile:getProfile(),lastRecord:getRecord(),feedback:fbEl?fbEl.value.trim():"",useCEO:document.getElementById("useCEO").checked});
+    lastOpinions=data.opinions;
+    document.getElementById("meetStatus").innerHTML=data.ceoReason?('<div class="ceobar"><span class="crown">♛</span> CEO：'+esc(data.ceoReason)+'</div>'):"";
+    o.innerHTML="";var i=0;
+    (function nx(){if(i>=data.opinions.length){showDeepBtn();run.disabled=false;return;}
+      var t=data.opinions[i];var m=document.createElement("div");m.className="advisor";
+      m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'</small></div><div class="bubble">'+esc(t.output)+'</div><label class="pick"><input type="checkbox" onchange="tog(\''+t.role+'\',this)"> 選她做深度報告</label></div>';
+      o.appendChild(m);setTimeout(function(){m.classList.add("show");},30);i++;setTimeout(nx,220);})();
+  }catch(e){showErr("meetStatus",e.message||e);run.disabled=false;}
 }
-function tog(r,el){if(el.checked){if(picked.size>=3){el.checked=false;return;}picked.add(r);}else picked.delete(r);const b=document.getElementById("deepbtn"),h=document.getElementById("pickhint");if(b)b.disabled=picked.size===0;if(h)h.textContent=picked.size?("已選 "+picked.size+" 位"):"勾選 1~3 位（最多 3 位）";}
-function showDeepBtn(){document.getElementById("deepwrap").innerHTML='<div class="pickhint" id="pickhint">勾選 1~3 位（最多 3 位）</div><button class="deepbtn" id="deepbtn" disabled onclick="stage2()">請選中的顧問出深度報告 ▶</button>';}
+function tog(r,el){if(el.checked){if(picked.size>=3){el.checked=false;return;}picked.add(r);}else picked.delete(r);var b=document.getElementById("deepbtn");if(b)b.disabled=picked.size===0;}
+function showDeepBtn(){document.getElementById("deepwrap").innerHTML='<button class="btn btn2" id="deepbtn" disabled onclick="stage2()">請選中顧問出深度報告 ▶</button>';}
 async function stage2(){
-  const b=document.getElementById("deepbtn"),w=document.getElementById("deepwrap");
-  b.disabled=true;b.textContent="深度報告產出中…（約 30~60 秒）";
-  const profile=getProfile();
+  var b=document.getElementById("deepbtn"),w=document.getElementById("deepwrap");b.disabled=true;b.textContent="深度報告產出中…（約 30~60 秒）";
   try{
-    const data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile,today:new Date().toISOString().slice(0,10)});
-    lastReports=data.reports;
-    const h=document.createElement("div");h.className="deephdr";h.textContent="✦ 深度報告（顧問互相參考後）✦";w.appendChild(h);
-    let i=0;(function nx(){
-      if(i>=data.reports.length){showSaveBtn();return;}
-      const t=data.reports[i];const safe=(t.output||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
-      const m=document.createElement("div");m.className="advisor deep";
-      m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'・深度</small></div><div class="bubble">'+safe+'</div><button class="copy" onclick="cp(this,this.previousElementSibling)">📋 複製</button></div>';
-      w.appendChild(m);setTimeout(()=>m.classList.add("show"),30);i++;setTimeout(nx,300);
-    })();
-  }catch(e){w.insertAdjacentHTML("beforeend",'<div class="err">❌ 出錯了：'+String(e.message||e)+'</div>');}
+    var data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile:getProfile(),today:new Date().toISOString().slice(0,10)});
+    lastReports=data.reports;w.insertAdjacentHTML("beforeend",'<div class="status">✦ 深度報告 ✦</div>');
+    var i=0;(function nx(){if(i>=data.reports.length){showReviewBtn();return;}
+      var t=data.reports[i];var m=document.createElement("div");m.className="advisor deep";
+      m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'・深度</small></div><div class="bubble">'+esc(t.output)+'</div><button class="copy" onclick="cp(this)">📋 複製</button></div>';
+      w.appendChild(m);setTimeout(function(){m.classList.add("show");},30);i++;setTimeout(nx,260);})();
+  }catch(e){showErr("deepwrap",e.message||e);}
 }
-function showSaveBtn(){document.getElementById("deepwrap").insertAdjacentHTML("beforeend",'<button class="savebtn" id="savebtn" onclick="saveMeeting()">💾 結束開會，存成交接記錄（下次接續）</button>');}
-async function saveMeeting(){
-  const btn=document.getElementById("savebtn");btn.disabled=true;btn.textContent="產生交接記錄中…";
-  try{const data=await callAPI("/summary",{task:lastTask,opinions:lastOpinions,reports:lastReports,today:new Date().toISOString().slice(0,10)});saveRecord(data.record);btn.textContent="✅ 已存交接記錄，下次開會會接續";renderHandoff();}
-  catch(e){btn.disabled=false;btn.textContent="❌ 存檔失敗，再試一次";}
+function showReviewBtn(){document.getElementById("reviewwrap").innerHTML='<button class="btn" onclick="doReview()">🛡️ 把關官審核報告 ▶</button>';}
+async function doReview(){
+  var w=document.getElementById("reviewwrap");w.innerHTML='<div class="status">🛡️ 把關官審核中…</div>';
+  try{
+    var data=await callAPI("/review",{task:lastTask,reports:lastReports,profile:getProfile()});
+    if(data.pass){w.innerHTML='<div class="out">🛡️ 把關官：<b style="color:#8fd18f">通過，可放行</b>'+(data.raw?('\n\n'+esc(data.raw)):"")+'</div><button class="btn" onclick="fillExec()">➡️ 交執行官產出成品</button><button class="btn btn2" onclick="saveMeeting()">💾 存交接紀錄</button>';}
+    else{reviewTries++;var h='<div class="out">🛡️ 把關官：<b style="color:#ffb3b3">退回</b>\n\n【問題】'+esc(data.issues)+'\n\n【怎麼改】'+esc(data.fix)+'</div>';
+      if(reviewTries<2){h+='<button class="btn" onclick="redoDeep()">🔄 顧問依意見重寫（第'+(reviewTries+1)+'次）</button>';}
+      else{h+='<div class="hint">已重跑 2 次，交你人工定奪。</div><button class="btn" onclick="fillExec()">➡️ 我自己判斷，仍交執行官</button>';}
+      h+='<button class="btn btn2" onclick="saveMeeting()">💾 存交接紀錄</button>';w.innerHTML=h;}
+  }catch(e){showErr("reviewwrap",e.message||e);}
 }
-function cp(btn,bub){navigator.clipboard.writeText(bub.textContent).then(()=>{btn.textContent="✅ 已複製";setTimeout(()=>btn.textContent="📋 複製",1500);}).catch(()=>{btn.textContent="長按上方文字複製";});}
-renderProfStatus();renderHandoff();
+async function redoDeep(){
+  var w=document.getElementById("reviewwrap");w.innerHTML='<div class="status">顧問依意見重寫中…</div>';
+  try{var data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile:getProfile(),today:new Date().toISOString().slice(0,10)});
+    lastReports=data.reports;var dw=document.getElementById("deepwrap");dw.innerHTML='<div class="status">✦ 重寫後的深度報告 ✦</div>';
+    data.reports.forEach(function(t){var m=document.createElement("div");m.className="advisor deep show";m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'・深度</small></div><div class="bubble">'+esc(t.output)+'</div><button class="copy" onclick="cp(this)">📋 複製</button></div>';dw.appendChild(m);});
+    doReview();}catch(e){showErr("reviewwrap",e.message||e);}
+}
+async function saveMeeting(){try{var data=await callAPI("/summary",{task:lastTask,opinions:lastOpinions,reports:lastReports,today:new Date().toISOString().slice(0,10)});saveRecord(data.record);renderHandoff();document.getElementById("meetStatus").innerHTML='<div class="status">✅ 已存交接紀錄</div>';}catch(e){showErr("reviewwrap",e.message||e);}}
+
+// 內容官
+async function doContent(){if(!checkURL("contentOut"))return;var task=v("contentTask");if(!task){showErr("contentOut","先輸入題材");return;}
+  document.getElementById("runContent").disabled=true;document.getElementById("contentOut").innerHTML='<div class="status">🧭 內容官佈局中…</div>';
+  try{var data=await callAPI("/content",{task:task,profile:getProfile(),today:new Date().toISOString().slice(0,10)});document.getElementById("contentOut").innerHTML='<div class="out">'+esc(data.content)+'</div><button class="copy" onclick="cp(this)">📋 複製</button>';}catch(e){showErr("contentOut",e.message||e);}
+  document.getElementById("runContent").disabled=false;}
+
+// 執行官
+function fillExec(){switchTo("execute");if(lastTask)document.getElementById("execTask").value=lastTask;}
+async function doExecute(){if(!checkURL("execOut"))return;var task=v("execTask")||lastTask;if(!task){showErr("execOut","先輸入要產出什麼");return;}
+  document.getElementById("runExec").disabled=true;document.getElementById("execOut").innerHTML='<div class="status">✍️ 執行官產出中…</div>';
+  try{var data=await callAPI("/execute",{task:task,profile:getProfile(),reports:lastReports,channel:execChannel});document.getElementById("execOut").innerHTML='<div class="out">'+esc(data.output)+'</div><button class="copy" onclick="cp(this)">📋 複製成品</button>';}catch(e){showErr("execOut",e.message||e);}
+  document.getElementById("runExec").disabled=false;}
+
+// 讀圖壓縮
+function fileToCompressedBase64(file,cb,errcb){var reader=new FileReader();reader.onload=function(){var img=new Image();img.onload=function(){var w=img.width,h=img.height,max=1400;if(w>max||h>max){if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;}}var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);cb(c.toDataURL("image/jpeg",0.8).split(",")[1]);};img.onerror=function(){errcb("圖片讀取失敗");};img.src=reader.result;};reader.onerror=function(){errcb("檔案讀取失敗");};reader.readAsDataURL(file);}
+function doStats(ev){var f=ev.target.files[0];if(!f)return;if(!checkURL("statsOut"))return;document.getElementById("statsOut").innerHTML='<div class="status">📊 讀取中…</div>';
+  fileToCompressedBase64(f,async function(b64){try{var data=await callAPI("/vision-stats",{image:b64,mediaType:"image/jpeg"});var r=data.result||{};pushStats({date:new Date().toISOString().slice(0,10),likes:r.likes,comments:r.comments,views:r.views,note:r.note||""});document.getElementById("statsOut").innerHTML='<div class="out">📊 讀到成效：\n讚：'+(r.likes==null?"—":r.likes)+'　留言：'+(r.comments==null?"—":r.comments)+'　瀏覽：'+(r.views==null?"—":r.views)+(r.note?('\n重點：'+esc(r.note)):"")+'\n\n✅ 已存進成效紀錄</div>';}catch(e){showErr("statsOut",e.message||e);}},function(er){showErr("statsOut",er);});}
+function doReply(ev){var f=ev.target.files[0];if(!f)return;if(!checkURL("replyOut"))return;document.getElementById("replyOut").innerHTML='<div class="status">💬 業務官讀取中…</div>';
+  fileToCompressedBase64(f,async function(b64){try{var data=await callAPI("/vision-reply",{image:b64,mediaType:"image/jpeg",profile:getProfile()});document.getElementById("replyOut").innerHTML='<div class="out">'+esc(data.reply)+'</div><button class="copy" onclick="cp(this)">📋 複製回覆</button>';}catch(e){showErr("replyOut",e.message||e);}},function(er){showErr("replyOut",er);});}
+
+// 成效紀錄
+function renderRecords(){var a=getStatsLog();var box=document.getElementById("recordList");if(!a.length){box.innerHTML='<div class="hint">還沒有紀錄。到「讀成效」上傳截圖就會存進來。</div>';return;}box.innerHTML=a.map(function(r){return '<div class="out">📅 '+r.date+'　讚 '+(r.likes==null?"—":r.likes)+'　留言 '+(r.comments==null?"—":r.comments)+'　瀏覽 '+(r.views==null?"—":r.views)+(r.note?('\n'+esc(r.note)):"")+'</div>';}).join("");}
+function clearRecords(){try{localStorage.removeItem(LS_STATS);}catch(e){}renderRecords();}
+
+function cp(btn){var box=btn.previousElementSibling;var txt=box?box.textContent:"";navigator.clipboard.writeText(txt).then(function(){btn.textContent="✅ 已複製";setTimeout(function(){btn.textContent="📋 複製";},1500);}).catch(function(){btn.textContent="長按上方文字複製";});}
+
+// init
+renderLineup();loadProf();renderHandoff();
 </script></body></html>
