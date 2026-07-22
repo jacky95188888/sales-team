@@ -239,6 +239,7 @@ function switchTo(p){
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("show"));
   document.getElementById("p_"+p).classList.add("show");
   if(p==="record")renderRecords();
+  if(p==="minutes")renderMinutes();
   window.scrollTo(0,0);
 }
 document.getElementById("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)switchTo(b.dataset.p);});
