@@ -93,6 +93,7 @@ input[type=file]{padding:10px;font-size:.85rem;}
   <button data-p="reply">💬 客人對話</button>
   <button data-p="record">📈 成效紀錄</button>
   <button data-p="profile">⚙️ 我的產品</button>
+  <button data-p="minutes">🗒 會議記錄</button>
 </div>
 
 <!-- 開會 -->
@@ -154,17 +155,35 @@ input[type=file]{padding:10px;font-size:.85rem;}
 </div></div>
 
 <!-- 我的產品 -->
-<div class="page" id="p_profile"><div class="panel">
-  <label class="lbl">產品／服務名稱</label><input id="p_name" placeholder="例：脆皮烤豬">
-  <label class="lbl" style="margin-top:9px">一句話特色</label><input id="p_feature" placeholder="例：手工現做、外脆內嫩">
-  <label class="lbl" style="margin-top:9px">價格資訊</label><textarea id="p_price" placeholder="例：一條450，3條免運"></textarea>
-  <label class="lbl" style="margin-top:9px">目標客群</label><input id="p_audience" placeholder="例：基隆在地、重視新鮮的家庭">
-  <label class="lbl" style="margin-top:9px">聯絡方式</label><input id="p_contact" placeholder="例：LINE https://lin.ee/xxxx">
-  <label class="lbl" style="margin-top:9px">產業類型</label>
-  <select id="p_industry"><option value="">請選擇</option><option>食品/餐飲</option><option>電商/零售</option><option>服務/接案</option><option>數位工具/App</option><option>命理/身心靈</option><option>教育/課程</option><option>其他</option></select>
-  <button class="btn" onclick="saveProf()">💾 儲存產品資料</button>
-  <div id="profMsg" class="hint"></div>
-</div></div>
+<div class="page" id="p_profile">
+  <div class="panel">
+    <label class="lbl">📦 產品目錄（最多 20 樣）</label>
+    <div id="prodList" class="small" style="margin-bottom:10px"></div>
+    <button class="btn btn2" onclick="newProduct()">＋ 新增產品</button>
+  </div>
+  <div class="panel" id="prodEditor" style="display:none">
+    <label class="lbl">產品 / 服務名稱</label><input id="p_name" placeholder="例：手工脆皮烤豬">
+    <label class="lbl" style="margin-top:9px">一句話特色</label><input id="p_feat" placeholder="例：手工現做、外脆內嫩">
+    <label class="lbl" style="margin-top:9px">價格資訊</label><textarea id="p_price" placeholder="例：一條450，3條免運"></textarea>
+    <label class="lbl" style="margin-top:9px">目標客群</label><input id="p_audience" placeholder="例：基隆在地、重視新鮮的家庭">
+    <label class="lbl" style="margin-top:9px">聯絡方式</label><input id="p_contact" placeholder="例：LINE https://lin.ee/xxxx">
+    <label class="lbl" style="margin-top:9px">產業類型</label>
+    <select id="p_industry"><option value="">請選擇</option><option>食品/餐飲</option><option>電商/零售</option><option>服務/接案</option><option>其他</option></select>
+    <button class="btn" onclick="saveProduct()" style="margin-top:11px">💾 儲存產品</button>
+    <button class="btn btn2" onclick="cancelEdit()" style="margin-top:7px">取消</button>
+    <div id="prodEditor_msg" class="hint"></div>
+  </div>
+</div>
+
+<!-- 會議記錄 -->
+<div class="page" id="p_minutes">
+  <div class="panel">
+    <label class="lbl">🗒 會議記錄（自動保留最近 20 場）</label>
+    <div id="minutesList" class="small"></div>
+    <button class="btn btn2" onclick="clearMinutes()" style="margin-top:11px">清空記錄</button>
+  </div>
+</div>
+
 
 </div>
 <nav class="nav" id="navbar">
@@ -328,4 +347,98 @@ function cp(btn){var box=btn.previousElementSibling;var txt=box?box.textContent:
 
 // init
 renderLineup();loadProf();renderHandoff();
+
+/* ===== 產品目錄 ===== */
+const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
+const PF=["p_name","p_feat","p_price","p_audience","p_contact","p_industry"];
+let editingIdx=-1;
+
+function getProds(){try{return JSON.parse(localStorage.getItem(LS_PRODS)||"[]");}catch(e){return [];}}
+function setProds(a){try{localStorage.setItem(LS_PRODS,JSON.stringify(a));}catch(e){}}
+function getCurIdx(){var n=parseInt(localStorage.getItem(LS_CUR));return isNaN(n)?0:n;}
+function pmsg(t){var e=document.getElementById("prodEditor_msg");if(e)e.textContent=t||"";}
+
+function renderProds(){
+  var el=document.getElementById("prodList");if(!el)return;
+  var ps=getProds(),cur=getCurIdx();
+  if(!ps.length){el.innerHTML='<div style="opacity:.7">還沒有產品，點下面新增。</div>';return;}
+  el.innerHTML=ps.map(function(p,i){
+    var on=(i===cur);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px;margin-bottom:6px;border-radius:10px;background:'
+      +(on?'rgba(212,175,55,.18)':'rgba(255,255,255,.05)')
+      +';border:1px solid '+(on?'rgba(212,175,55,.5)':'rgba(255,255,255,.12)')+'">'
+      +'<div style="flex:1;min-width:0" onclick="pickProduct('+i+')">'
+      +'<div style="font-weight:700;color:#f0d98a">'+(on?'★ ':'')+esc(p.p_name||'(未命名)')+'</div>'
+      +'<div style="font-size:.72rem;opacity:.75">'+esc(p.p_feat||'')+'　'+esc(p.p_price||'')+'</div>'
+      +'</div>'
+      +'<button onclick="editProduct('+i+')" style="background:none;border:none;color:#c9b6ff;font-size:.82rem;padding:4px 6px">改</button>'
+      +'<button onclick="delProduct('+i+')" style="background:none;border:none;color:#ff8f8f;font-size:.82rem;padding:4px 6px">刪</button>'
+      +'</div>';
+  }).join("");
+}
+function pickProduct(i){localStorage.setItem(LS_CUR,i);renderProds();}
+function newProduct(){
+  editingIdx=-1;pmsg("");
+  PF.forEach(function(id){var e=document.getElementById(id);if(e)e.value="";});
+  var ed=document.getElementById("prodEditor");if(ed)ed.style.display="block";
+}
+function editProduct(i){
+  var p=getProds()[i];if(!p)return;
+  editingIdx=i;pmsg("");
+  PF.forEach(function(id){var e=document.getElementById(id);if(e)e.value=p[id]||"";});
+  var ed=document.getElementById("prodEditor");if(ed)ed.style.display="block";
+}
+function saveProduct(){
+  var p={};
+  PF.forEach(function(id){var e=document.getElementById(id);p[id]=e?String(e.value).trim():"";});
+  if(!p.p_name){pmsg("⚠️ 請至少填產品名稱");return;}
+  var ps=getProds();
+  if(editingIdx>=0){ps[editingIdx]=p;}
+  else{
+    if(ps.length>=20){pmsg("⚠️ 最多 20 樣產品");return;}
+    ps.push(p);localStorage.setItem(LS_CUR,ps.length-1);
+  }
+  setProds(ps);cancelEdit();renderProds();
+}
+function delProduct(i){
+  var ps=getProds();ps.splice(i,1);setProds(ps);
+  if(getCurIdx()>=ps.length)localStorage.setItem(LS_CUR,Math.max(0,ps.length-1));
+  renderProds();
+}
+function cancelEdit(){editingIdx=-1;pmsg("");var ed=document.getElementById("prodEditor");if(ed)ed.style.display="none";}
+function currentProductText(){
+  var p=getProds()[getCurIdx()];if(!p)return "";
+  return "產品："+(p.p_name||"")+"／特色："+(p.p_feat||"")+"／價格："+(p.p_price||"")
+    +"／客群："+(p.p_audience||"")+"／產業："+(p.p_industry||"")+"／聯絡："+(p.p_contact||"");
+}
+
+/* ===== 會議記錄 ===== */
+const LS_MIN="advisor_minutes";
+function getMinutes(){try{return JSON.parse(localStorage.getItem(LS_MIN)||"[]");}catch(e){return [];}}
+function saveMinute(task,content){
+  try{
+    var a=getMinutes();
+    a.unshift({t:Date.now(),task:String(task||"").slice(0,200),body:String(content||"").slice(0,3000)});
+    localStorage.setItem(LS_MIN,JSON.stringify(a.slice(0,20)));
+    renderMinutes();
+  }catch(e){}
+}
+function renderMinutes(){
+  var el=document.getElementById("minutesList");if(!el)return;
+  var a=getMinutes();
+  if(!a.length){el.innerHTML='<div style="opacity:.7">還沒有會議記錄。開完會會自動存在這裡。</div>';return;}
+  el.innerHTML=a.map(function(m){
+    var d=new Date(m.t);
+    var ds=(d.getMonth()+1)+"/"+d.getDate()+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+    return '<div style="margin-bottom:9px;padding:10px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12)">'
+      +'<div style="font-size:.72rem;opacity:.7">'+ds+'</div>'
+      +'<div style="font-weight:700;color:#f0d98a;margin:3px 0">'+esc(m.task)+'</div>'
+      +'<div style="font-size:.78rem;white-space:pre-wrap;max-height:160px;overflow:auto">'+esc(m.body)+'</div>'
+      +'</div>';
+  }).join("");
+}
+function clearMinutes(){try{localStorage.removeItem(LS_MIN);}catch(e){}renderMinutes();}
+
+renderProds();renderMinutes();
+
 </script></body></html>
