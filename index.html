@@ -347,7 +347,8 @@ function clearRecords(){try{localStorage.removeItem(LS_STATS);}catch(e){}renderR
 function cp(btn){var box=btn.previousElementSibling;var txt=box?box.textContent:"";navigator.clipboard.writeText(txt).then(function(){btn.textContent="✅ 已複製";setTimeout(function(){btn.textContent="📋 複製";},1500);}).catch(function(){btn.textContent="長按上方文字複製";});}
 
 // init
-renderLineup();loadProf();renderHandoff();
+renderLineup();renderHandoff();
+
 
 /* ===== 產品目錄 ===== */
 const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
