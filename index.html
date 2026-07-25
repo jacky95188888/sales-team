@@ -69,6 +69,12 @@ textarea{min-height:48px;font-weight:600;}
 .chrow button.on{background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-weight:800;}
 .small{font-size:.75rem;color:var(--ink-soft);}
 input[type=file]{padding:10px;font-size:.85rem;}
+/* 產品目前選用提示條 */
+.curprod{display:flex;align-items:center;gap:8px;background:linear-gradient(160deg,rgba(44,31,77,.75),rgba(30,20,56,.75));border:1px solid rgba(232,194,103,.3);border-radius:12px;padding:9px 12px;margin-bottom:12px;font-size:.8rem;color:var(--ink-soft);}
+.curprod b{color:var(--gold-lt);}
+.curprod .none{color:#ffb3b3;}
+/* step 標號 */
+.stepnum{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-size:.72rem;font-weight:800;margin-right:6px;vertical-align:middle;}
 /* 底部導覽 */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:flex-end;justify-content:space-around;background:linear-gradient(180deg,rgba(30,20,56,.7),rgba(20,13,38,.98));border-top:1px solid rgba(232,194,103,.25);padding:8px 4px calc(8px + env(safe-area-inset-bottom));backdrop-filter:blur(10px);max-width:680px;margin:0 auto;}
 .nav button{background:none;border:none;color:var(--ink-soft);font-size:.62rem;display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:2px;}
@@ -98,6 +104,7 @@ input[type=file]{padding:10px;font-size:.85rem;}
 
 <!-- 開會 -->
 <div class="page show" id="p_meet">
+  <div id="curProdBar"></div>
   <div id="handoff"></div>
   <div class="panel">
     <textarea id="task" placeholder="想跟顧問團討論什麼？例如：推天衡，要狂一點的新方向"></textarea>
@@ -158,17 +165,25 @@ input[type=file]{padding:10px;font-size:.85rem;}
 <div class="page" id="p_profile">
   <div class="panel">
     <label class="lbl">📦 產品目錄（最多 20 樣）</label>
+    <div class="hint">點產品名可切換「目前主打」（★）；顧問開會、執行官產出都會依這個產品發言。</div>
     <div id="prodList" class="small" style="margin-bottom:10px"></div>
     <button class="btn btn2" onclick="newProduct()">＋ 新增產品</button>
   </div>
   <div class="panel" id="prodEditor" style="display:none">
-    <label class="lbl">產品 / 服務名稱</label><input id="p_name" placeholder="例：手工脆皮烤豬">
-    <label class="lbl" style="margin-top:9px">一句話特色</label><input id="p_feat" placeholder="例：手工現做、外脆內嫩">
-    <label class="lbl" style="margin-top:9px">價格資訊</label><textarea id="p_price" placeholder="例：一條450，3條免運"></textarea>
-    <label class="lbl" style="margin-top:9px">目標客群</label><input id="p_audience" placeholder="例：基隆在地、重視新鮮的家庭">
-    <label class="lbl" style="margin-top:9px">聯絡方式</label><input id="p_contact" placeholder="例：LINE https://lin.ee/xxxx">
-    <label class="lbl" style="margin-top:9px">產業類型</label>
-    <select id="p_industry"><option value="">請選擇</option><option>食品/餐飲</option><option>電商/零售</option><option>服務/接案</option><option>其他</option></select>
+    <label class="lbl"><span class="stepnum">1</span>產品 / 服務名稱</label>
+    <input id="p_name" placeholder="例：手工脆皮烤豬 / 祛濕快">
+    <label class="lbl" style="margin-top:9px"><span class="stepnum">2</span>一句話特色</label>
+    <input id="p_feat" placeholder="例：手工現做、外脆內嫩 / 即時減低體內濕重感">
+    <label class="lbl" style="margin-top:9px"><span class="stepnum">3</span>價格資訊</label>
+    <textarea id="p_price" placeholder="例：一條450，3條免運 / 港幣$299一盒10條"></textarea>
+    <label class="lbl" style="margin-top:9px"><span class="stepnum">4</span>目標客群</label>
+    <input id="p_audience" placeholder="例：基隆在地家庭 / 香港女士30-50歲">
+    <label class="lbl" style="margin-top:9px"><span class="stepnum">5</span>產業類型</label>
+    <select id="p_industry"><option value="">請選擇</option><option>食品/餐飲</option><option>保健品/健康食品</option><option>美妝/保養</option><option>電商/零售</option><option>服務/接案</option><option>命理/身心靈</option><option>其他</option></select>
+    <label class="lbl" style="margin-top:9px"><span class="stepnum">6</span>聯絡方式</label>
+    <input id="p_contact" placeholder="例：LINE https://lin.ee/xxxx">
+    <label class="lbl" style="margin-top:9px"><span class="stepnum">7</span>產品連結 / 官網 / 資料網址<span style="color:var(--ink-soft);font-weight:400">（選填，讓顧問讀到完整資料）</span></label>
+    <textarea id="p_url" placeholder="貼上官網、產品頁、DM 或成分說明的網址，一行一個。顧問會參考這裡的內容發言，避免亂編。"></textarea>
     <button class="btn" onclick="saveProduct()" style="margin-top:11px">💾 儲存產品</button>
     <button class="btn btn2" onclick="cancelEdit()" style="margin-top:7px">取消</button>
     <div id="prodEditor_msg" class="hint"></div>
@@ -240,6 +255,7 @@ function switchTo(p){
   document.getElementById("p_"+p).classList.add("show");
   if(p==="record")renderRecords();
   if(p==="minutes")renderMinutes();
+  if(p==="meet")renderCurProdBar();
   window.scrollTo(0,0);
 }
 document.getElementById("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)switchTo(b.dataset.p);});
@@ -255,17 +271,34 @@ function getStatsLog(){try{var r=localStorage.getItem(LS_STATS);return r?JSON.pa
 function pushStats(rec){var a=getStatsLog();a.unshift(rec);if(a.length>50)a.length=50;try{localStorage.setItem(LS_STATS,JSON.stringify(a));}catch(e){}}
 
 async function callAPI(path,payload){
+  // 每次呼叫都自動注入「目前主打產品」，讓顧問讀得到產品資料，避免亂編
+  var prod=currentProductObj();
+  if(prod){
+    payload.product=prod;                 // 結構化產品資料
+    payload.productText=currentProductText(); // 純文字版，Worker 若只吃字串也能用
+    // 同時塞進 profile，讓舊版 Worker（吃 profile 的）也能拿到產品
+    var prof=payload.profile||{};
+    prof.productName=prod.p_name;prof.productFeature=prod.p_feat;prof.productPrice=prod.p_price;
+    prof.productAudience=prod.p_audience;prof.productIndustry=prod.p_industry;
+    prof.productContact=prod.p_contact;prof.productUrl=prod.p_url;
+    payload.profile=prof;
+  }
   var resp=await fetch(WORKER_URL.replace(/\/$/,"")+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   var data=await resp.json();if(data.error)throw new Error(data.error);return data;
 }
 function checkURL(where){if(WORKER_URL.includes("你的worker")){showErr(where,"還沒設定 Worker 網址");return false;}return true;}
 
-// 產品
-function saveProf(){var p={name:v("p_name"),feature:v("p_feature"),price:v("p_price"),audience:v("p_audience"),contact:v("p_contact"),industry:v("p_industry")};try{localStorage.setItem(LS_PROF,JSON.stringify(p));}catch(e){}document.getElementById("profMsg").textContent="✅ 已儲存";}
-function loadProf(){var p=getProfile();if(!p)return;["name","feature","price","audience","contact","industry"].forEach(k=>{var el=document.getElementById("p_"+k);if(el&&p[k])el.value=p[k];});}
-
 // 開會
 function renderHandoff(){var rec=getRecord();var box=document.getElementById("handoff");if(!rec){box.innerHTML="";return;}box.innerHTML='<div class="panel"><div class="lbl">📋 上次交接（'+(rec.date||"")+'）</div><div class="out">'+esc(rec.summary)+'</div><label class="lbl" style="margin-top:8px">上次方案效果如何？</label><textarea id="feedback" placeholder="例：貼文30讚但只2人點連結"></textarea></div>';}
+
+// 目前主打產品提示條（開會頁）
+function renderCurProdBar(){
+  var box=document.getElementById("curProdBar");if(!box)return;
+  var p=currentProductObj();
+  if(!p){box.innerHTML='<div class="curprod"><span>📦</span><span class="none">尚未設定產品，顧問會缺乏依據。請先到「我的產品」新增。</span></div>';return;}
+  box.innerHTML='<div class="curprod"><span>📦 本次開會依據：</span><b>'+esc(p.p_name||"(未命名)")+'</b><span style="opacity:.7">'+esc(p.p_feat||"")+'</span></div>';
+}
+
 async function stage1(){
   if(!checkURL("meetStatus"))return;
   var task=v("task");if(!task){document.getElementById("meetStatus").innerHTML='<div class="status">想討論什麼呢 🙂</div>';return;}
@@ -318,7 +351,11 @@ async function redoDeep(){
     data.reports.forEach(function(t){var m=document.createElement("div");m.className="advisor deep show";m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'・深度</small></div><div class="bubble">'+esc(t.output)+'</div><button class="copy" onclick="cp(this)">📋 複製</button></div>';dw.appendChild(m);});
     doReview();}catch(e){showErr("reviewwrap",e.message||e);}
 }
-async function saveMeeting(){try{var data=await callAPI("/summary",{task:lastTask,opinions:lastOpinions,reports:lastReports,today:new Date().toISOString().slice(0,10)});saveRecord(data.record);renderHandoff();document.getElementById("meetStatus").innerHTML='<div class="status">✅ 已存交接紀錄</div>';}catch(e){showErr("reviewwrap",e.message||e);}}
+async function saveMeeting(){try{var data=await callAPI("/summary",{task:lastTask,opinions:lastOpinions,reports:lastReports,today:new Date().toISOString().slice(0,10)});saveRecord(data.record);renderHandoff();
+  // 自動存一份會議記錄
+  var body="【CEO 交接摘要】\n"+(data.record&&data.record.summary?data.record.summary:"")+"\n\n【深度報告】\n"+lastReports.map(function(r){return "◆ "+NAMES[r.role]+"（"+TITLES[r.role]+"）\n"+r.output;}).join("\n\n");
+  saveMinute(lastTask,body);
+  document.getElementById("meetStatus").innerHTML='<div class="status">✅ 已存交接紀錄＋會議記錄</div>';}catch(e){showErr("reviewwrap",e.message||e);}}
 
 // 內容官
 async function doContent(){if(!checkURL("contentOut"))return;var task=v("contentTask");if(!task){showErr("contentOut","先輸入題材");return;}
@@ -347,12 +384,12 @@ function clearRecords(){try{localStorage.removeItem(LS_STATS);}catch(e){}renderR
 function cp(btn){var box=btn.previousElementSibling;var txt=box?box.textContent:"";navigator.clipboard.writeText(txt).then(function(){btn.textContent="✅ 已複製";setTimeout(function(){btn.textContent="📋 複製";},1500);}).catch(function(){btn.textContent="長按上方文字複製";});}
 
 // init
-renderLineup();renderHandoff();
+renderLineup();renderHandoff();renderCurProdBar();
 
 
 /* ===== 產品目錄 ===== */
 const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
-const PF=["p_name","p_feat","p_price","p_audience","p_contact","p_industry"];
+const PF=["p_name","p_feat","p_price","p_audience","p_industry","p_contact","p_url"];
 let editingIdx=-1;
 
 function getProds(){try{return JSON.parse(localStorage.getItem(LS_PRODS)||"[]");}catch(e){return [];}}
@@ -378,7 +415,7 @@ function renderProds(){
       +'</div>';
   }).join("");
 }
-function pickProduct(i){localStorage.setItem(LS_CUR,i);renderProds();}
+function pickProduct(i){localStorage.setItem(LS_CUR,i);renderProds();renderCurProdBar();}
 function newProduct(){
   editingIdx=-1;pmsg("");
   PF.forEach(function(id){var e=document.getElementById(id);if(e)e.value="";});
@@ -400,18 +437,22 @@ function saveProduct(){
     if(ps.length>=20){pmsg("⚠️ 最多 20 樣產品");return;}
     ps.push(p);localStorage.setItem(LS_CUR,ps.length-1);
   }
-  setProds(ps);cancelEdit();renderProds();
+  setProds(ps);cancelEdit();renderProds();renderCurProdBar();
 }
 function delProduct(i){
   var ps=getProds();ps.splice(i,1);setProds(ps);
   if(getCurIdx()>=ps.length)localStorage.setItem(LS_CUR,Math.max(0,ps.length-1));
-  renderProds();
+  renderProds();renderCurProdBar();
 }
 function cancelEdit(){editingIdx=-1;pmsg("");var ed=document.getElementById("prodEditor");if(ed)ed.style.display="none";}
+
+function currentProductObj(){var p=getProds()[getCurIdx()];return p||null;}
 function currentProductText(){
-  var p=getProds()[getCurIdx()];if(!p)return "";
-  return "產品："+(p.p_name||"")+"／特色："+(p.p_feat||"")+"／價格："+(p.p_price||"")
+  var p=currentProductObj();if(!p)return "";
+  var s="產品："+(p.p_name||"")+"／特色："+(p.p_feat||"")+"／價格："+(p.p_price||"")
     +"／客群："+(p.p_audience||"")+"／產業："+(p.p_industry||"")+"／聯絡："+(p.p_contact||"");
+  if(p.p_url)s+="／參考連結："+p.p_url;
+  return s;
 }
 
 /* ===== 會議記錄 ===== */
@@ -428,7 +469,7 @@ function saveMinute(task,content){
 function renderMinutes(){
   var el=document.getElementById("minutesList");if(!el)return;
   var a=getMinutes();
-  if(!a.length){el.innerHTML='<div style="opacity:.7">還沒有會議記錄。開完會會自動存在這裡。</div>';return;}
+  if(!a.length){el.innerHTML='<div style="opacity:.7">還沒有會議記錄。開完會存交接紀錄時會自動存在這裡。</div>';return;}
   el.innerHTML=a.map(function(m){
     var d=new Date(m.t);
     var ds=(d.getMonth()+1)+"/"+d.getDate()+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
