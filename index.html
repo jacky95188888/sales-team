@@ -167,7 +167,7 @@ input[type=file]{padding:10px;font-size:.85rem;}
     <label class="lbl">📦 產品目錄（最多 20 樣）</label>
     <div class="hint">點產品名可切換「目前主打」（★）；顧問開會、執行官產出都會依這個產品發言。</div>
     <div id="prodList" class="small" style="margin-bottom:10px"></div>
-    <button class="btn btn2" onclick="newProduct()">＋ 新增產品</button>
+    <button class="btn btn2" id="btnNewProd" onclick="newProduct()">＋ 新增產品</button>
   </div>
   <div class="panel" id="prodEditor" style="display:none">
     <label class="lbl"><span class="stepnum">1</span>產品 / 服務名稱</label>
@@ -218,6 +218,11 @@ const ORDER=["insight","strategy","sales","review","innovate"];
 const LS_REC="advisor_last_record",LS_PROF="advisor_profile",LS_STATS="advisor_stats_log";
 let lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
 const picked=new Set();
+// 產品目錄／會議記錄相關宣告（提到最前面，避免 TDZ 導致初始化崩潰）
+const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
+const LS_MIN="advisor_minutes";
+const PF=["p_name","p_feat","p_price","p_audience","p_industry","p_contact","p_url"];
+let editingIdx=-1;
 
 function lookByTime(){
   const h = new Date().getHours();
@@ -388,10 +393,6 @@ renderLineup();renderHandoff();renderCurProdBar();
 
 
 /* ===== 產品目錄 ===== */
-const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
-const PF=["p_name","p_feat","p_price","p_audience","p_industry","p_contact","p_url"];
-let editingIdx=-1;
-
 function getProds(){try{return JSON.parse(localStorage.getItem(LS_PRODS)||"[]");}catch(e){return [];}}
 function setProds(a){try{localStorage.setItem(LS_PRODS,JSON.stringify(a));}catch(e){}}
 function getCurIdx(){var n=parseInt(localStorage.getItem(LS_CUR));return isNaN(n)?0:n;}
@@ -419,7 +420,13 @@ function pickProduct(i){localStorage.setItem(LS_CUR,i);renderProds();renderCurPr
 function newProduct(){
   editingIdx=-1;pmsg("");
   PF.forEach(function(id){var e=document.getElementById(id);if(e)e.value="";});
-  var ed=document.getElementById("prodEditor");if(ed)ed.style.display="block";
+  var ed=document.getElementById("prodEditor");
+  if(ed){
+    ed.style.display="block";
+    // 展開後捲到編輯區，避免使用者以為沒反應
+    setTimeout(function(){try{ed.scrollIntoView({behavior:"smooth",block:"start"});}catch(_){ed.scrollIntoView();}
+      var f=document.getElementById("p_name");if(f)try{f.focus();}catch(_){}},60);
+  }
 }
 function editProduct(i){
   var p=getProds()[i];if(!p)return;
@@ -456,7 +463,6 @@ function currentProductText(){
 }
 
 /* ===== 會議記錄 ===== */
-const LS_MIN="advisor_minutes";
 function getMinutes(){try{return JSON.parse(localStorage.getItem(LS_MIN)||"[]");}catch(e){return [];}}
 function saveMinute(task,content){
   try{
@@ -483,5 +489,11 @@ function renderMinutes(){
 function clearMinutes(){try{localStorage.removeItem(LS_MIN);}catch(e){}renderMinutes();}
 
 renderProds();renderMinutes();
+
+// 備援：用 addEventListener 再綁一次「新增產品」，避免 inline onclick 在某些 iOS PWA 情境失效
+(function(){
+  var b=document.getElementById("btnNewProd");
+  if(b){b.addEventListener("click",function(e){e.preventDefault();newProduct();});}
+})();
 
 </script></body></html>
