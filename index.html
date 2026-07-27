@@ -216,12 +216,8 @@ const TITLES={insight:"洞察官",strategy:"策略官",sales:"業務官",review:
 const EMOJI={insight:"👩‍💼",strategy:"💁‍♀️",sales:"🙋‍♀️",review:"👩‍🏫",innovate:"👩‍🎤"};
 const ORDER=["insight","strategy","sales","review","innovate"];
 const LS_REC="advisor_last_record",LS_PROF="advisor_profile",LS_STATS="advisor_stats_log";
-var lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
-var picked=new Set();
-window.picked=picked;
-Object.defineProperty(window,"lastTask",{get:()=>lastTask,set:v=>lastTask=v});
-Object.defineProperty(window,"lastOpinions",{get:()=>lastOpinions,set:v=>lastOpinions=v});
-Object.defineProperty(window,"lastReports",{get:()=>lastReports,set:v=>lastReports=v});
+let lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
+const picked=new Set();
 
 // 產品目錄／會議記錄相關宣告（提到最前面，避免 TDZ 導致初始化崩潰）
 const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
