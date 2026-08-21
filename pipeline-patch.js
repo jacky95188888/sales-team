@@ -164,8 +164,7 @@ function patchMeetFlow(){
         w.insertAdjacentHTML("beforeend",'<div class="status">✦ 深度報告 ✦</div>');
         var i=0;(function nx(){
           if(i>=data.reports.length){
-            renderDirections(data.directions);   // ← 新增：方向選擇
-            if(typeof showReviewBtn==="function") showReviewBtn();
+            renderDirections(data.directions);   // 先由老闆選方向，再整合、再把關
             return;
           }
           var t=data.reports[i];var m=document.createElement("div");m.className="advisor deep";
@@ -220,6 +219,11 @@ async function doFinalize(){
     });
     var out=document.createElement("div");out.innerHTML='<div class="out">📄 執行方案\n\n'+esc(data.plan)+'</div><button class="copy" onclick="cp(this)">📋 複製方案</button>';
     wrap.appendChild(out);
+    // 最終方案必須進入同一條資料流，否則把關官與執行官只會看到舊的深度報告。
+    window._finalPlan=data.plan||"";
+    window.lastReports=(window.lastReports||[]).filter(function(r){return r&&!r._isFinalPlan;});
+    window.lastReports.push({role:"strategy",_isFinalPlan:true,output:"【老闆選定後的整合執行方案】\n"+(data.plan||"")});
+    if(typeof showReviewBtn==="function") showReviewBtn();
     if(btn){btn.style.display="none";}
   }catch(e){ if(typeof showErr==="function") showErr("deepwrap",e.message||e); if(btn){btn.disabled=false;btn.textContent="📄 整合成執行方案 ▶";} }
 }
