@@ -159,7 +159,7 @@ function patchMeetFlow(){
       var w=document.getElementById("deepwrap");
       var b=document.getElementById("deepbtn");if(b){b.disabled=true;b.textContent="深度報告產出中…（約 30~60 秒）";}
       try{
-        var data=await callAPI("/deepdive",{task:window.lastTask,picks:[...window.picked],opinions:window.lastOpinions,profile:getProfile(),today:new Date().toISOString().slice(0,10),dataPack:window._lastDataPack||""});
+        var data=await callAPI("/deepdive",{task:window.lastTask,picks:[...window.picked],opinions:window.lastOpinions,profile:getProfile(),today:localDateKey(),timezone:"Asia/Taipei",dataPack:window._lastDataPack||""});
         window.lastReports=data.reports;
         w.insertAdjacentHTML("beforeend",'<div class="status">✦ 深度報告 ✦</div>');
         var i=0;(function nx(){
@@ -178,7 +178,7 @@ function patchMeetFlow(){
 
 /* 顯示 2-3 個方向讓老闆選（決策點②）*/
 function renderDirections(directions){
-  if(!Array.isArray(directions)||!directions.length) return;
+  if(!Array.isArray(directions)||!directions.length){directions=[{title:"依重點報告整合",core:"將本輪深度報告整合成可執行方案",why:"服務未提供候選方向，使用安全備援流程",firstStep:"整合現有建議",risk:"請人工確認內容是否符合實際限制"}];}
   window._directions=directions;window._chosenDir=null;
   var wrap=document.createElement("div");wrap.className="dirwrap";wrap.id="dirwrap";
   wrap.innerHTML='<div class="status">✦ 請選一個方向（老闆決策）✦</div>'+
@@ -192,6 +192,7 @@ function renderDirections(directions){
     }).join("");
   document.getElementById("deepwrap").appendChild(wrap);
 }
+window.renderDirections=renderDirections;
 window.chooseDir=function(i){
   window._chosenDir=window._directions[i];
   document.querySelectorAll(".dircard").forEach(function(c,idx){c.classList.toggle("sel",idx===i);});
@@ -213,7 +214,7 @@ async function doFinalize(){
   try{
     var extra=document.getElementById("extraNeed");
     var data=await callAPI("/finalize",{
-      task:window.lastTask,today:new Date().toISOString().slice(0,10),profile:getProfile(),
+      task:window.lastTask,today:localDateKey(),timezone:"Asia/Taipei",profile:getProfile(),
       dataPack:window._lastDataPack||"",opinions:window.lastOpinions||[],reports:window.lastReports||[],
       direction:window._chosenDir,extraNeed:extra?extra.value.trim():""
     });
@@ -233,6 +234,7 @@ window.monAdd=async function(){
   var label=val("mon_label"),url=val("mon_url"),purpose=val("mon_purpose");
   var useJudge=document.getElementById("mon_judge").checked;
   if(!url){alert("請填要監測的網址");return;}
+  if(!/^https:\/\//i.test(url)){alert("監測網址只接受 https:// 開頭");return;}
   try{
     // 先讀現有清單，append 後存回
     var cur=await callAPI("/monitor-config",{action:"list"});
@@ -269,12 +271,15 @@ window.monNotesLoad=async function(){
   var box=document.getElementById("monNotes");if(!box)return;box.innerHTML='<div class="hint">撈取中…</div>';
   try{
     var resp=await fetch(WORKER_URL.replace(/\/$/,"")+"/monitor-notes");
-    var r=await resp.json();
+    var raw=await resp.text(),r;
+    try{r=raw?JSON.parse(raw):{};}catch(_){throw new Error("監測服務回傳格式錯誤（HTTP "+resp.status+"）");}
+    if(!resp.ok||r.error)throw new Error(r.error||("監測服務暫時異常（HTTP "+resp.status+"）"));
     var notes=r.notes||[];
     if(!notes.length){box.innerHTML='<div class="hint">目前沒有偵測到變化。（cron 跑過、且有變動才會出現）</div>';return;}
     box.innerHTML=notes.map(function(n){
       var d=new Date(n.at);var ds=(d.getMonth()+1)+"/"+d.getDate()+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
-      return '<div class="mon-note"><b>'+esc(n.label||n.url)+'</b> <span style="opacity:.6">'+ds+'</span>\n'+esc(n.headline||"")+'\n<a class="srclink" href="'+esc(n.url)+'" target="_blank">'+esc(n.url)+'</a></div>';
+      var safe=/^https:\/\//i.test(String(n.url||""))?String(n.url):"";
+      return '<div class="mon-note"><b>'+esc(n.label||n.url)+'</b> <span style="opacity:.6">'+ds+'</span>\n'+esc(n.headline||"")+(safe?'\n<a class="srclink" href="'+esc(safe)+'" target="_blank" rel="noopener noreferrer">'+esc(safe)+'</a>':'')+'</div>';
     }).join("");
   }catch(e){box.innerHTML='<div class="err">'+esc(e.message||e)+'</div>';}
 };
@@ -287,13 +292,13 @@ window.algoGo=async function(){
   var btn=document.getElementById("algoRun");if(btn)btn.disabled=true;
   out.innerHTML='<div class="status">📐 分析中…'+(mode==="live"?'（上網查最新，約 30~60 秒）':'')+'</div>';
   try{
-    var data=await callAPI("/algo",{mode:mode,task:task,profile:getProfile(),today:new Date().toISOString().slice(0,10)});
+    var data=await callAPI("/algo",{mode:mode,task:task,profile:getProfile(),today:localDateKey(),timezone:"Asia/Taipei"});
     var r=data.result||{};
     var text=r.analysis||"";
     var html='<div class="out">'+esc(text)+'</div><button class="copy" onclick="cp(this)">📋 複製</button>';
     if(r.sources&&r.sources.length){
       html+='<div class="datapack"><span class="dp-h">📎 資料來源</span>'+
-        r.sources.map(function(s){return '<a class="srclink" href="'+esc(s.url)+'" target="_blank">'+esc(s.title||s.url)+'</a>';}).join("")+'</div>';
+        r.sources.map(function(s){var u=/^https:\/\//i.test(String(s.url||""))?String(s.url):"";return u?'<a class="srclink" href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(s.title||u)+'</a>':'';}).join("")+'</div>';
     }
     out.innerHTML=html;
   }catch(e){ if(typeof showErr==="function") showErr("algoOut",e.message||e); else out.innerHTML='<div class="err">'+esc(e.message||e)+'</div>'; }
@@ -305,11 +310,12 @@ window.algoVision=function(ev){
   // 沿用原檔的壓縮函式
   fileToCompressedBase64(f,async function(b64){
     try{
-      var data=await callAPI("/algo",{mode:"vision",image:b64,mediaType:"image/jpeg",profile:getProfile(),today:new Date().toISOString().slice(0,10)});
+      var data=await callAPI("/algo",{mode:"vision",image:b64,mediaType:"image/jpeg",profile:getProfile(),today:localDateKey(),timezone:"Asia/Taipei"});
       var r=data.result||"";
       var text=(typeof r==="string")?r:(r.analysis||JSON.stringify(r));
       out.innerHTML='<div class="out">'+esc(text)+'</div><button class="copy" onclick="cp(this)">📋 複製</button>';
     }catch(e){ out.innerHTML='<div class="err">'+esc(e.message||e)+'</div>'; }
+    finally{ev.target.value="";}
   },function(er){ out.innerHTML='<div class="err">'+esc(er)+'</div>'; });
 };
 
