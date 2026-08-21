@@ -27,9 +27,10 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .lineup .nm{font-size:.64rem;color:var(--gold-lt);margin-top:3px;line-height:1.2;}
 .lineup .nm small{display:block;color:var(--purple-lt);font-size:.58rem;}
 /* tabs */
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;-webkit-overflow-scrolling:touch;}
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding-bottom:8px;margin-bottom:12px;}
 .tabs::-webkit-scrollbar{display:none;}
-.tabs button{flex:0 0 auto;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 13px;font-size:.8rem;color:var(--ink);white-space:nowrap;}
+.tabs button{min-width:0;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 6px;font-size:.76rem;color:var(--ink);white-space:nowrap;}
+.tabs button[data-p="meet"],.tabs button[data-p="execute"],.tabs button[data-p="stats"],.tabs button[data-p="reply"],.tabs button[data-p="profile"]{display:none;}
 .tabs button.active{background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-weight:800;border-color:var(--gold);box-shadow:0 0 12px rgba(232,194,103,.4);}
 .page{display:none;} .page.show{display:block;}
 /* panel 金框 */
@@ -72,6 +73,9 @@ input[type=file]{padding:10px;font-size:.85rem;}
 /* 產品目前選用提示條 */
 .curprod{display:flex;align-items:center;gap:8px;background:linear-gradient(160deg,rgba(44,31,77,.75),rgba(30,20,56,.75));border:1px solid rgba(232,194,103,.3);border-radius:12px;padding:9px 12px;margin-bottom:12px;font-size:.8rem;color:var(--ink-soft);}
 .curprod b{color:var(--gold-lt);}
+.curprod{flex-wrap:wrap;align-items:flex-start;line-height:1.55;}
+.curprod b{flex:1 1 auto;min-width:0;word-break:keep-all;}
+.curprod span:last-child{flex:1 1 100%;overflow-wrap:anywhere;}
 .curprod .none{color:#ffb3b3;}
 /* step 標號 */
 .stepnum{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-size:.72rem;font-weight:800;margin-right:6px;vertical-align:middle;}
@@ -216,8 +220,9 @@ const TITLES={insight:"洞察官",strategy:"策略官",sales:"業務官",review:
 const EMOJI={insight:"👩‍💼",strategy:"💁‍♀️",sales:"🙋‍♀️",review:"👩‍🏫",innovate:"👩‍🎤"};
 const ORDER=["insight","strategy","sales","review","innovate"];
 const LS_REC="advisor_last_record",LS_PROF="advisor_profile",LS_STATS="advisor_stats_log";
-let lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
-const picked=new Set();
+// 這些狀態也要提供給後載入的產線／會議補丁；使用 var 才會成為 window 屬性。
+var lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
+var picked=new Set();
 
 // 產品目錄／會議記錄相關宣告（提到最前面，避免 TDZ 導致初始化崩潰）
 const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
@@ -295,7 +300,7 @@ async function callAPI(path,payload){
 function checkURL(where){if(WORKER_URL.includes("你的worker")){showErr(where,"還沒設定 Worker 網址");return false;}return true;}
 
 // 開會
-function renderHandoff(){var rec=getRecord();var box=document.getElementById("handoff");if(!rec){box.innerHTML="";return;}box.innerHTML='<div class="panel"><div class="lbl">📋 上次交接（'+(rec.date||"")+'）</div><div class="out">'+esc(rec.summary)+'</div><label class="lbl" style="margin-top:8px">上次方案效果如何？</label><textarea id="feedback" placeholder="例：貼文30讚但只2人點連結"></textarea></div>';}
+function renderHandoff(){var rec=getRecord();var box=document.getElementById("handoff");if(!rec){box.innerHTML="";return;}var summary=esc(rec.summary).replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");box.innerHTML='<div class="panel"><div class="lbl">📋 上次交接（'+(rec.date||"")+'）</div><div class="out">'+summary+'</div><label class="lbl" style="margin-top:8px">上次方案效果如何？</label><textarea id="feedback" placeholder="例：貼文30讚但只2人點連結"></textarea></div>';}
 
 // 目前主打產品提示條（開會頁）
 function renderCurProdBar(){
@@ -502,5 +507,4 @@ renderProds();renderMinutes();
 <script src="minutes-patch.js"></script>
 <script src="boost-patch.js"></script>
 </body></html>
-
 
