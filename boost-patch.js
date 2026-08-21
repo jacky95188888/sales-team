@@ -18,7 +18,7 @@
   var OPT = "advisor_boost_opt";  // 開關
 
   function E(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
-  function today() { return new Date().toISOString().slice(0, 10); }
+  function today() { return typeof localDateKey==="function"?localDateKey():new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()); }
   function rd(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
   function wr(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 
@@ -250,13 +250,9 @@
   /* ================= 成效回灌 ================= */
   function getStats() { return rd(SK, []); }
 
-  // 讀成效時，自動記下是哪場會議的方向
+  // 保留呼叫端明確指定的會議歸屬；禁止再把成效猜成最近一場會議。
   var origPush = window.pushStats;
   window.pushStats = function (rec) {
-    try {
-      var mins = rd("advisor_minutes", []);
-      if (mins.length) rec.fromTask = mins[0].task || "";
-    } catch (e) {}
     if (typeof origPush === "function") return origPush(rec);
   };
 

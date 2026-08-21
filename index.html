@@ -27,9 +27,10 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .lineup .nm{font-size:.64rem;color:var(--gold-lt);margin-top:3px;line-height:1.2;}
 .lineup .nm small{display:block;color:var(--purple-lt);font-size:.58rem;}
 /* tabs */
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;-webkit-overflow-scrolling:touch;}
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding-bottom:8px;margin-bottom:12px;}
 .tabs::-webkit-scrollbar{display:none;}
-.tabs button{flex:0 0 auto;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 13px;font-size:.8rem;color:var(--ink);white-space:nowrap;}
+.tabs button{min-width:0;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 6px;font-size:.76rem;color:var(--ink);white-space:nowrap;}
+.tabs button[data-p="meet"],.tabs button[data-p="execute"],.tabs button[data-p="stats"],.tabs button[data-p="reply"],.tabs button[data-p="profile"]{display:none;}
 .tabs button.active{background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-weight:800;border-color:var(--gold);box-shadow:0 0 12px rgba(232,194,103,.4);}
 .page{display:none;} .page.show{display:block;}
 /* panel 金框 */
@@ -72,6 +73,9 @@ input[type=file]{padding:10px;font-size:.85rem;}
 /* 產品目前選用提示條 */
 .curprod{display:flex;align-items:center;gap:8px;background:linear-gradient(160deg,rgba(44,31,77,.75),rgba(30,20,56,.75));border:1px solid rgba(232,194,103,.3);border-radius:12px;padding:9px 12px;margin-bottom:12px;font-size:.8rem;color:var(--ink-soft);}
 .curprod b{color:var(--gold-lt);}
+.curprod{flex-wrap:wrap;align-items:flex-start;line-height:1.55;}
+.curprod b{flex:1 1 auto;min-width:0;word-break:keep-all;}
+.curprod span:last-child{flex:1 1 100%;overflow-wrap:anywhere;}
 .curprod .none{color:#ffb3b3;}
 /* step 標號 */
 .stepnum{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-size:.72rem;font-weight:800;margin-right:6px;vertical-align:middle;}
@@ -143,15 +147,17 @@ input[type=file]{padding:10px;font-size:.85rem;}
 <!-- 讀成效 -->
 <div class="page" id="p_stats"><div class="panel">
   <label class="lbl">📊 上傳 FB 後台/貼文截圖，自動讀成效</label>
+  <label class="lbl">這張成效屬於哪一個主題？</label>
+  <select id="statsMeeting"><option value="">請選擇，避免成效歸錯會議</option></select>
   <input type="file" accept="image/*" id="statsFile" onchange="doStats(event)">
-  <div class="hint">讀出讚數、留言數、瀏覽/觸及與重點留言。圖片只讀不存，只留數字結果。</div>
+  <div class="hint">讀出讚、留言、分享、點擊與瀏覽。上傳前請遮住姓名、電話、地址等個資；圖片會送至 AI 分析，前端不會保存原圖。</div>
 </div><div id="statsOut"></div></div>
 
 <!-- 客人對話 -->
 <div class="page" id="p_reply"><div class="panel">
   <label class="lbl">💬 上傳與客人的對話截圖，業務官幫你擬回覆</label>
   <input type="file" accept="image/*" id="replyFile" onchange="doReply(event)">
-  <div class="hint">業務官讀懂客人想要什麼，用你的口氣擬一則可直接複製傳出的回覆。圖片只讀不存。</div>
+  <div class="hint">業務官讀懂客人需求並擬回覆。上傳前請遮住姓名、電話、地址等個資；圖片會送至 AI 分析，前端不會保存原圖。</div>
 </div><div id="replyOut"></div></div>
 
 <!-- 成效紀錄 -->
@@ -165,7 +171,7 @@ input[type=file]{padding:10px;font-size:.85rem;}
 <div class="page" id="p_profile">
   <div class="panel">
     <label class="lbl">📦 產品目錄（最多 20 樣）</label>
-    <div class="hint">點產品名可切換「目前主打」（★）；顧問開會、執行官產出都會依這個產品發言。</div>
+    <div class="hint">點產品名可切換「目前主打」（★）；顧問開會、執行官產出都會依這個產品發言。資料目前只保存在這台裝置，清除瀏覽資料前請先保留重要內容。</div>
     <div id="prodList" class="small" style="margin-bottom:10px"></div>
     <button class="btn btn2" id="btnNewProd" onclick="newProduct()">＋ 新增產品</button>
   </div>
@@ -216,8 +222,9 @@ const TITLES={insight:"洞察官",strategy:"策略官",sales:"業務官",review:
 const EMOJI={insight:"👩‍💼",strategy:"💁‍♀️",sales:"🙋‍♀️",review:"👩‍🏫",innovate:"👩‍🎤"};
 const ORDER=["insight","strategy","sales","review","innovate"];
 const LS_REC="advisor_last_record",LS_PROF="advisor_profile",LS_STATS="advisor_stats_log";
-let lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0;
-const picked=new Set();
+// 這些狀態也要提供給後載入的產線／會議補丁；使用 var 才會成為 window 屬性。
+var lastTask="",lastOpinions=[],lastReports=[],execChannel="fb",reviewTries=0,lastReviewFeedback="";
+var picked=new Set();
 
 // 產品目錄／會議記錄相關宣告（提到最前面，避免 TDZ 導致初始化崩潰）
 const LS_PRODS="advisor_products", LS_CUR="advisor_current_product";
@@ -243,8 +250,10 @@ function fileFor(role){
 }
 
 function photo(r){return '<div class="photo"><img src="'+fileFor(r)+'" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<div class=&quot;emoji&quot;>'+EMOJI[r]+'</div>\')"><span class="cap">'+NAMES[r]+'</span></div>';}
-function esc(t){return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");}
-function showErr(where,msg){var el=document.getElementById(where);if(el)el.innerHTML='<div class="err">❌ '+String(msg).replace(/</g,"&lt;")+'</div>';}
+function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+function showErr(where,msg){var el=document.getElementById(where);if(el)el.innerHTML='<div class="err">❌ '+esc(msg)+'</div>';}
+function localDateKey(d){d=d||new Date();return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);}
+function metricNumber(v){if(v==null||v==="")return null;if(typeof v==="number")return Number.isFinite(v)?v:null;var s=String(v).trim().toUpperCase().replace(/,/g,"");var m=s.match(/-?\d+(?:\.\d+)?/);if(!m)return null;var n=Number(m[0]);if(/K|千/.test(s))n*=1000;if(/M|百萬/.test(s))n*=1000000;if(/萬/.test(s))n*=10000;return Number.isFinite(n)?Math.round(n):null;}
 
 // 五顧問陣容列
 function renderLineup(){
@@ -262,6 +271,7 @@ function switchTo(p){
   if(p==="record")renderRecords();
   if(p==="minutes")renderMinutes();
   if(p==="meet")renderCurProdBar();
+  if(p==="stats")renderStatsMeetings();
   window.scrollTo(0,0);
 }
 document.getElementById("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)switchTo(b.dataset.p);});
@@ -289,13 +299,18 @@ async function callAPI(path,payload){
     prof.productContact=prod.p_contact;prof.productUrl=prod.p_url;
     payload.profile=prof;
   }
-  var resp=await fetch(WORKER_URL.replace(/\/$/,"")+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-  var data=await resp.json();if(data.error)throw new Error(data.error);return data;
+  var ctl=new AbortController(),timer=setTimeout(function(){ctl.abort();},90000),resp,text,data;
+  try{resp=await fetch(WORKER_URL.replace(/\/$/,"")+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload||{}),signal:ctl.signal});text=await resp.text();}
+  catch(e){if(e&&e.name==="AbortError")throw new Error("連線逾時，請稍後再試");throw new Error("無法連接顧問服務，請檢查網路後重試");}
+  finally{clearTimeout(timer);}
+  try{data=text?JSON.parse(text):{};}catch(e){throw new Error("顧問服務回傳格式錯誤（HTTP "+resp.status+"）");}
+  if(!resp.ok)throw new Error(data.error||("顧問服務暫時異常（HTTP "+resp.status+"）"));
+  if(data.error)throw new Error(data.error);return data;
 }
 function checkURL(where){if(WORKER_URL.includes("你的worker")){showErr(where,"還沒設定 Worker 網址");return false;}return true;}
 
 // 開會
-function renderHandoff(){var rec=getRecord();var box=document.getElementById("handoff");if(!rec){box.innerHTML="";return;}box.innerHTML='<div class="panel"><div class="lbl">📋 上次交接（'+(rec.date||"")+'）</div><div class="out">'+esc(rec.summary)+'</div><label class="lbl" style="margin-top:8px">上次方案效果如何？</label><textarea id="feedback" placeholder="例：貼文30讚但只2人點連結"></textarea></div>';}
+function renderHandoff(){var rec=getRecord();var box=document.getElementById("handoff");if(!rec){box.innerHTML="";return;}var summary=esc(rec.summary).replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");box.innerHTML='<div class="panel"><div class="lbl">📋 上次交接（'+(rec.date||"")+'）</div><div class="out">'+summary+'</div><label class="lbl" style="margin-top:8px">上次方案效果如何？</label><textarea id="feedback" placeholder="例：貼文30讚但只2人點連結"></textarea></div>';}
 
 // 目前主打產品提示條（開會頁）
 function renderCurProdBar(){
@@ -308,14 +323,14 @@ function renderCurProdBar(){
 async function stage1(){
   if(!checkURL("meetStatus"))return;
   var task=v("task");if(!task){document.getElementById("meetStatus").innerHTML='<div class="status">想討論什麼呢 🙂</div>';return;}
-  lastTask=task;picked.clear();lastReports=[];reviewTries=0;
+  lastTask=task;picked.clear();lastReports=[];reviewTries=0;lastReviewFeedback="";window._finalPlan="";window._chosenDir=null;
   document.getElementById("deepwrap").innerHTML="";document.getElementById("reviewwrap").innerHTML="";
   var o=document.getElementById("opin");o.innerHTML="";
   var run=document.getElementById("runMeet");run.disabled=true;
   document.getElementById("meetStatus").innerHTML='<div class="ceobar"><span class="crown">♛</span> CEO 派顧問開會中…（約 20~40 秒）</div>';
   var fbEl=document.getElementById("feedback");
   try{
-    var data=await callAPI("/opinions",{task:task,today:new Date().toISOString().slice(0,10),profile:getProfile(),lastRecord:getRecord(),feedback:fbEl?fbEl.value.trim():"",useCEO:document.getElementById("useCEO").checked});
+    var data=await callAPI("/opinions",{task:task,today:localDateKey(),timezone:"Asia/Taipei",profile:getProfile(),lastRecord:getRecord(),feedback:fbEl?fbEl.value.trim():"",useCEO:document.getElementById("useCEO").checked});
     lastOpinions=data.opinions;
     document.getElementById("meetStatus").innerHTML=data.ceoReason?('<div class="ceobar"><span class="crown">♛</span> CEO：'+esc(data.ceoReason)+'</div>'):"";
     o.innerHTML="";var i=0;
@@ -330,7 +345,7 @@ function showDeepBtn(){document.getElementById("deepwrap").innerHTML='<button cl
 async function stage2(){
   var b=document.getElementById("deepbtn"),w=document.getElementById("deepwrap");b.disabled=true;b.textContent="深度報告產出中…（約 30~60 秒）";
   try{
-    var data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile:getProfile(),today:new Date().toISOString().slice(0,10)});
+    var data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile:getProfile(),today:localDateKey(),timezone:"Asia/Taipei"});
     lastReports=data.reports;w.insertAdjacentHTML("beforeend",'<div class="status">✦ 深度報告 ✦</div>');
     var i=0;(function nx(){if(i>=data.reports.length){showReviewBtn();return;}
       var t=data.reports[i];var m=document.createElement("div");m.className="advisor deep";
@@ -342,9 +357,9 @@ function showReviewBtn(){document.getElementById("reviewwrap").innerHTML='<butto
 async function doReview(){
   var w=document.getElementById("reviewwrap");w.innerHTML='<div class="status">🛡️ 把關官審核中…</div>';
   try{
-    var data=await callAPI("/review",{task:lastTask,reports:lastReports,profile:getProfile()});
-    if(data.pass){w.innerHTML='<div class="out">🛡️ 把關官：<b style="color:#8fd18f">通過，可放行</b>'+(data.raw?('\n\n'+esc(data.raw)):"")+'</div><button class="btn" onclick="fillExec()">➡️ 交執行官產出成品</button><button class="btn btn2" onclick="saveMeeting()">💾 存交接紀錄</button>';}
-    else{reviewTries++;var h='<div class="out">🛡️ 把關官：<b style="color:#ffb3b3">退回</b>\n\n【問題】'+esc(data.issues)+'\n\n【怎麼改】'+esc(data.fix)+'</div>';
+    var data=await callAPI("/review",{task:lastTask,reports:lastReports,finalPlan:window._finalPlan||"",direction:window._chosenDir||null,profile:getProfile()});
+    if(data.pass){w.innerHTML='<div class="out">🛡️ 把關官：<b style="color:#8fd18f">通過，可放行</b>'+(data.raw?('\n\n'+esc(data.raw)):"")+'</div><button class="btn" onclick="fillContent()">🧭 先交內容官安排平台</button><button class="btn" onclick="fillExec()">✍️ 直接交執行官產出</button><button class="btn btn2" onclick="saveMeeting()">💾 存交接紀錄</button>';}
+    else{reviewTries++;lastReviewFeedback="【問題】"+(data.issues||"")+"\n【怎麼改】"+(data.fix||"");var h='<div class="out">🛡️ 把關官：<b style="color:#ffb3b3">退回</b>\n\n【問題】'+esc(data.issues)+'\n\n【怎麼改】'+esc(data.fix)+'</div>';
       if(reviewTries<2){h+='<button class="btn" onclick="redoDeep()">🔄 顧問依意見重寫（第'+(reviewTries+1)+'次）</button>';}
       else{h+='<div class="hint">已重跑 2 次，交你人工定奪。</div><button class="btn" onclick="fillExec()">➡️ 我自己判斷，仍交執行官</button>';}
       h+='<button class="btn btn2" onclick="saveMeeting()">💾 存交接紀錄</button>';w.innerHTML=h;}
@@ -352,12 +367,13 @@ async function doReview(){
 }
 async function redoDeep(){
   var w=document.getElementById("reviewwrap");w.innerHTML='<div class="status">顧問依意見重寫中…</div>';
-  try{var data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile:getProfile(),today:new Date().toISOString().slice(0,10)});
+  try{var data=await callAPI("/deepdive",{task:lastTask,picks:[...picked],opinions:lastOpinions,profile:getProfile(),today:localDateKey(),timezone:"Asia/Taipei",reviewFeedback:lastReviewFeedback,direction:window._chosenDir||null,previousPlan:window._finalPlan||""});
     lastReports=data.reports;var dw=document.getElementById("deepwrap");dw.innerHTML='<div class="status">✦ 重寫後的深度報告 ✦</div>';
     data.reports.forEach(function(t){var m=document.createElement("div");m.className="advisor deep show";m.innerHTML=photo(t.role)+'<div class="bw"><div class="who">'+NAMES[t.role]+' <small>'+TITLES[t.role]+'・深度</small></div><div class="bubble">'+esc(t.output)+'</div><button class="copy" onclick="cp(this)">📋 複製</button></div>';dw.appendChild(m);});
-    doReview();}catch(e){showErr("reviewwrap",e.message||e);}
+    window._finalPlan="";document.getElementById("reviewwrap").innerHTML="";
+    if(typeof window.renderDirections==="function")window.renderDirections(data.directions||[]);else showReviewBtn();}catch(e){showErr("reviewwrap",e.message||e);}
 }
-async function saveMeeting(){try{var data=await callAPI("/summary",{task:lastTask,opinions:lastOpinions,reports:lastReports,today:new Date().toISOString().slice(0,10)});saveRecord(data.record);renderHandoff();
+async function saveMeeting(){try{var data=await callAPI("/summary",{task:lastTask,opinions:lastOpinions,reports:lastReports,today:localDateKey(),timezone:"Asia/Taipei",finalPlan:window._finalPlan||"",direction:window._chosenDir||null});saveRecord(data.record);renderHandoff();
   // 自動存一份會議記錄
   var body="【CEO 交接摘要】\n"+(data.record&&data.record.summary?data.record.summary:"")+"\n\n【深度報告】\n"+lastReports.map(function(r){return "◆ "+NAMES[r.role]+"（"+TITLES[r.role]+"）\n"+r.output;}).join("\n\n");
   saveMinute(lastTask,body);
@@ -366,11 +382,12 @@ async function saveMeeting(){try{var data=await callAPI("/summary",{task:lastTas
 // 內容官
 async function doContent(){if(!checkURL("contentOut"))return;var task=v("contentTask");if(!task){showErr("contentOut","先輸入題材");return;}
   document.getElementById("runContent").disabled=true;document.getElementById("contentOut").innerHTML='<div class="status">🧭 內容官佈局中…</div>';
-  try{var data=await callAPI("/content",{task:task,profile:getProfile(),today:new Date().toISOString().slice(0,10)});document.getElementById("contentOut").innerHTML='<div class="out">'+esc(data.content)+'</div><button class="copy" onclick="cp(this)">📋 複製</button>';}catch(e){showErr("contentOut",e.message||e);}
+  try{var data=await callAPI("/content",{task:task,profile:getProfile(),today:localDateKey(),timezone:"Asia/Taipei",reports:lastReports,finalPlan:window._finalPlan||"",direction:window._chosenDir||null});document.getElementById("contentOut").innerHTML='<div class="out">'+esc(data.content)+'</div><button class="copy" onclick="cp(this)">📋 複製</button>';}catch(e){showErr("contentOut",e.message||e);}
   document.getElementById("runContent").disabled=false;}
 
 // 執行官
 function fillExec(){switchTo("execute");if(lastTask)document.getElementById("execTask").value=lastTask;}
+function fillContent(){switchTo("content");if(lastTask)document.getElementById("contentTask").value=lastTask;}
 async function doExecute(){if(!checkURL("execOut"))return;var task=v("execTask")||lastTask;if(!task){showErr("execOut","先輸入要產出什麼");return;}
   document.getElementById("runExec").disabled=true;document.getElementById("execOut").innerHTML='<div class="status">✍️ 執行官產出中…</div>';
   try{var data=await callAPI("/execute",{task:task,profile:getProfile(),reports:lastReports,channel:execChannel});document.getElementById("execOut").innerHTML='<div class="out">'+esc(data.output)+'</div><button class="copy" onclick="cp(this)">📋 複製成品</button>';}catch(e){showErr("execOut",e.message||e);}
@@ -378,13 +395,14 @@ async function doExecute(){if(!checkURL("execOut"))return;var task=v("execTask")
 
 // 讀圖壓縮
 function fileToCompressedBase64(file,cb,errcb){var reader=new FileReader();reader.onload=function(){var img=new Image();img.onload=function(){var w=img.width,h=img.height,max=1400;if(w>max||h>max){if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;}}var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);cb(c.toDataURL("image/jpeg",0.8).split(",")[1]);};img.onerror=function(){errcb("圖片讀取失敗");};img.src=reader.result;};reader.onerror=function(){errcb("檔案讀取失敗");};reader.readAsDataURL(file);}
-function doStats(ev){var f=ev.target.files[0];if(!f)return;if(!checkURL("statsOut"))return;document.getElementById("statsOut").innerHTML='<div class="status">📊 讀取中…</div>';
-  fileToCompressedBase64(f,async function(b64){try{var data=await callAPI("/vision-stats",{image:b64,mediaType:"image/jpeg"});var r=data.result||{};pushStats({date:new Date().toISOString().slice(0,10),likes:r.likes,comments:r.comments,views:r.views,note:r.note||""});document.getElementById("statsOut").innerHTML='<div class="out">📊 讀到成效：\n讚：'+(r.likes==null?"—":r.likes)+'　留言：'+(r.comments==null?"—":r.comments)+'　瀏覽：'+(r.views==null?"—":r.views)+(r.note?('\n重點：'+esc(r.note)):"")+'\n\n✅ 已存進成效紀錄</div>';}catch(e){showErr("statsOut",e.message||e);}},function(er){showErr("statsOut",er);});}
+function renderStatsMeetings(){var el=document.getElementById("statsMeeting");if(!el)return;var cur=el.value,a=getMinutes();el.innerHTML='<option value="">請選擇，避免成效歸錯會議</option>'+a.map(function(m){var id=String(m.id||m.t||"");return '<option value="'+esc(id)+'">'+esc((m.task||"未命名主題").slice(0,55))+'</option>';}).join("");el.value=cur;}
+function doStats(ev){var f=ev.target.files[0];if(!f)return;if(!checkURL("statsOut"))return;var sel=document.getElementById("statsMeeting"),mid=sel?sel.value:"",mins=getMinutes(),meeting=mins.find(function(m){return String(m.id||m.t||"")===mid;});if(!meeting){showErr("statsOut","請先選擇這張成效屬於哪一個會議主題");ev.target.value="";return;}document.getElementById("statsOut").innerHTML='<div class="status">📊 讀取中…</div>';
+  fileToCompressedBase64(f,async function(b64){try{var data=await callAPI("/vision-stats",{image:b64,mediaType:"image/jpeg"});var r=data.result||{},rec={date:localDateKey(),meetingId:mid,fromTask:meeting.task||"",likes:metricNumber(r.likes),comments:metricNumber(r.comments),shares:metricNumber(r.shares),clicks:metricNumber(r.clicks),views:metricNumber(r.views),orders:metricNumber(r.orders),revenue:metricNumber(r.revenue),note:r.note||""};pushStats(rec);document.getElementById("statsOut").innerHTML='<div class="out">📊 讀到成效：\n主題：'+esc(rec.fromTask)+'\n讚：'+(rec.likes==null?"—":rec.likes)+'　留言：'+(rec.comments==null?"—":rec.comments)+'　分享：'+(rec.shares==null?"—":rec.shares)+'\n點擊：'+(rec.clicks==null?"—":rec.clicks)+'　瀏覽：'+(rec.views==null?"—":rec.views)+(rec.note?('\n重點：'+esc(rec.note)):"")+'\n\n✅ 已存進成效紀錄</div>';renderRecords();}catch(e){showErr("statsOut",e.message||e);}finally{ev.target.value="";}},function(er){showErr("statsOut",er);ev.target.value="";});}
 function doReply(ev){var f=ev.target.files[0];if(!f)return;if(!checkURL("replyOut"))return;document.getElementById("replyOut").innerHTML='<div class="status">💬 業務官讀取中…</div>';
-  fileToCompressedBase64(f,async function(b64){try{var data=await callAPI("/vision-reply",{image:b64,mediaType:"image/jpeg",profile:getProfile()});document.getElementById("replyOut").innerHTML='<div class="out">'+esc(data.reply)+'</div><button class="copy" onclick="cp(this)">📋 複製回覆</button>';}catch(e){showErr("replyOut",e.message||e);}},function(er){showErr("replyOut",er);});}
+  fileToCompressedBase64(f,async function(b64){try{var data=await callAPI("/vision-reply",{image:b64,mediaType:"image/jpeg",profile:getProfile()});document.getElementById("replyOut").innerHTML='<div class="out">'+esc(data.reply)+'</div><button class="copy" onclick="cp(this)">📋 複製回覆</button>';}catch(e){showErr("replyOut",e.message||e);}finally{ev.target.value="";}},function(er){showErr("replyOut",er);ev.target.value="";});}
 
 // 成效紀錄
-function renderRecords(){var a=getStatsLog();var box=document.getElementById("recordList");if(!a.length){box.innerHTML='<div class="hint">還沒有紀錄。到「讀成效」上傳截圖就會存進來。</div>';return;}box.innerHTML=a.map(function(r){return '<div class="out">📅 '+r.date+'　讚 '+(r.likes==null?"—":r.likes)+'　留言 '+(r.comments==null?"—":r.comments)+'　瀏覽 '+(r.views==null?"—":r.views)+(r.note?('\n'+esc(r.note)):"")+'</div>';}).join("");}
+function renderRecords(){var a=getStatsLog();var box=document.getElementById("recordList");if(!a.length){box.innerHTML='<div class="hint">還沒有紀錄。到「讀成效」上傳截圖就會存進來。</div>';return;}box.innerHTML=a.map(function(r){return '<div class="out">📅 '+esc(r.date)+'　'+(r.fromTask?('主題：'+esc(r.fromTask)+'\n'):'')+'讚 '+(r.likes==null?"—":r.likes)+'　留言 '+(r.comments==null?"—":r.comments)+'　分享 '+(r.shares==null?"—":r.shares)+'\n點擊 '+(r.clicks==null?"—":r.clicks)+'　瀏覽 '+(r.views==null?"—":r.views)+'　訂單 '+(r.orders==null?"—":r.orders)+(r.note?('\n'+esc(r.note)):"")+'</div>';}).join("");}
 function clearRecords(){try{localStorage.removeItem(LS_STATS);}catch(e){}renderRecords();}
 
 function cp(btn){var box=btn.previousElementSibling;var txt=box?box.textContent:"";navigator.clipboard.writeText(txt).then(function(){btn.textContent="✅ 已複製";setTimeout(function(){btn.textContent="📋 複製";},1500);}).catch(function(){btn.textContent="長按上方文字複製";});}
@@ -439,6 +457,7 @@ function saveProduct(){
   var p={};
   PF.forEach(function(id){var e=document.getElementById(id);p[id]=e?String(e.value).trim():"";});
   if(!p.p_name){pmsg("⚠️ 請至少填產品名稱");return;}
+  if(p.p_url){var bad=p.p_url.split(/\r?\n/).map(function(x){return x.trim();}).filter(Boolean).find(function(x){return !/^https:\/\//i.test(x);});if(bad){pmsg("⚠️ 產品網址只接受 https:// 開頭，一行一個");return;}}
   var ps=getProds();
   if(editingIdx>=0){ps[editingIdx]=p;}
   else{
@@ -448,8 +467,9 @@ function saveProduct(){
   setProds(ps);cancelEdit();renderProds();renderCurProdBar();
 }
 function delProduct(i){
-  var ps=getProds();ps.splice(i,1);setProds(ps);
-  if(getCurIdx()>=ps.length)localStorage.setItem(LS_CUR,Math.max(0,ps.length-1));
+  var ps=getProds(),cur=getCurIdx();ps.splice(i,1);setProds(ps);
+  if(i<cur)cur--;else if(i===cur)cur=Math.min(cur,ps.length-1);
+  localStorage.setItem(LS_CUR,Math.max(0,cur));
   renderProds();renderCurProdBar();
 }
 function cancelEdit(){editingIdx=-1;pmsg("");var ed=document.getElementById("prodEditor");if(ed)ed.style.display="none";}
@@ -491,16 +511,8 @@ function clearMinutes(){try{localStorage.removeItem(LS_MIN);}catch(e){}renderMin
 
 renderProds();renderMinutes();
 
-// 備援：用 addEventListener 再綁一次「新增產品」，避免 inline onclick 在某些 iOS PWA 情境失效
-(function(){
-  var b=document.getElementById("btnNewProd");
-  if(b){b.addEventListener("click",function(e){e.preventDefault();newProduct();});}
-})();
-
 </script>
 <script src="pipeline-patch.js"></script>
 <script src="minutes-patch.js"></script>
 <script src="boost-patch.js"></script>
 </body></html>
-
-

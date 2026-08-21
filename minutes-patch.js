@@ -161,7 +161,7 @@
       var url  = URL.createObjectURL(blob);
       var a    = document.createElement("a");
       a.href = url;
-      a.download = "顧問團會議記錄_" + new Date().toISOString().slice(0, 10) + ".txt";
+      a.download = "顧問團會議記錄_" + (typeof localDateKey==="function"?localDateKey():new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date())) + ".txt";
       document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 3000);
       minFlag("已產生檔案，請在下載或分享選單存檔。");
@@ -308,7 +308,8 @@
     try {
       var data = await callAPI("/summary", {
         task: gTask(), opinions: gOpinions(), reports: gReports(),
-        today: new Date().toISOString().slice(0, 10)
+        today: (typeof localDateKey==="function"?localDateKey():new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date())), timezone:"Asia/Taipei",
+        finalPlan: window._finalPlan||"", direction: window._chosenDir||null
       });
       if (data && data.record) {
         if (typeof saveRecord   === "function") saveRecord(data.record);
