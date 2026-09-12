@@ -9,6 +9,7 @@
 
   var KEY = "advisor_hq_tasks_v1";
   var WORKSPACE_KEY = "advisor_hq_workspace_v1";
+  var MODE_KEY = "advisor_hq_approval_mode_v1";
   var currentRunId = null;
   var cloudBusy = false;
   var videoConfigState = { ready: false, apiReady: false, apiValid: false, ownerReady: false, creditReady: true, billing: null };
@@ -57,6 +58,14 @@
     id = "sanbao_" + Array.from(bytes).map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
     try { localStorage.setItem(WORKSPACE_KEY, id); } catch (_) {}
     return id;
+  }
+  function approvalMode() {
+    try { return localStorage.getItem(MODE_KEY) === "auto" ? "auto" : "review"; }
+    catch (_) { return "review"; }
+  }
+  function saveApprovalMode(mode) {
+    try { localStorage.setItem(MODE_KEY, mode === "auto" ? "auto" : "review"); }
+    catch (_) {}
   }
   function currentProduct() {
     try { return typeof currentProductObj === "function" ? currentProductObj() : null; }
@@ -120,6 +129,7 @@
       action: "save",
       workspaceId: workspaceId(),
       autoEnabled: true,
+      approvalMode: approvalMode(),
       profile: typeof getProfile === "function" ? getProfile() : {},
       product: product,
       channels: ["thread", "fb", "video", "tiktok", "youtube"]
@@ -198,6 +208,7 @@
       .hq-output{margin-top:9px;border-top:1px solid rgba(255,255,255,.1);padding-top:9px}.hq-output summary{color:var(--gold-lt);font-size:.78rem;cursor:pointer}.hq-output pre{white-space:pre-wrap;font-family:inherit;font-size:.78rem;color:var(--ink);margin-top:7px;max-height:280px;overflow:auto}.hq-output .copy{margin-top:7px}
       .hq-videoengine{margin-top:8px;padding:8px 9px;border-radius:9px;border:1px solid rgba(255,202,95,.3);background:rgba(255,202,95,.07);font-size:.7rem;color:#f2d996}.hq-videoengine b{color:var(--gold-lt)}
       .hq-videobox{margin-top:8px;padding:9px;border-radius:10px;background:rgba(8,7,18,.42);border:1px solid rgba(145,215,180,.22)}.hq-videobox video{display:block;width:100%;max-height:360px;border-radius:9px;background:#000;margin-top:8px}.hq-videobox a{display:inline-block;margin-top:8px;color:var(--gold-lt)}.hq-videostatus{font-size:.72rem;color:#91d7b4}.hq-mini[href]{text-decoration:none;display:inline-flex;align-items:center}
+      .hq-mode{margin-top:10px;padding:10px;border:1px solid rgba(169,139,216,.28);border-radius:11px;background:rgba(20,13,38,.48)}.hq-mode b{display:block;color:var(--gold-lt);font-size:.78rem;margin-bottom:7px}.hq-mode label{display:flex;align-items:flex-start;gap:7px;padding:7px 4px;color:var(--ink);font-size:.75rem;line-height:1.45}.hq-mode input{margin-top:2px;accent-color:var(--gold-dk)}.hq-mode small{display:block;color:var(--ink-soft);font-size:.67rem}
       .hq-quality{margin-top:9px;border-radius:10px;padding:9px;background:rgba(20,13,38,.45);font-size:.72rem;color:var(--ink-soft)}.hq-quality b{color:var(--gold-lt)}
       .hq-empty{text-align:center;color:var(--ink-soft);font-size:.78rem;padding:18px 8px}.hq-danger{color:#ff9e98!important}
       .hq-cloud{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding:9px 10px;border-radius:11px;background:rgba(20,13,38,.5);border:1px solid rgba(145,215,180,.24);font-size:.7rem;color:#91d7b4}.hq-cloud button{border:1px solid rgba(169,139,216,.45);border-radius:8px;background:#2c1f4d;color:var(--ink);padding:5px 8px;font-size:.66rem}.hq-syncbox{display:none;margin-top:8px}.hq-syncbox.on{display:flex;gap:6px}.hq-syncbox input{min-width:0;flex:1;margin:0;padding:8px;font-size:.72rem}.hq-syncbox button{margin:0;width:auto;padding:8px 10px}
@@ -220,6 +231,10 @@
       '<textarea id="hqGoal" placeholder="例：做一組能提高天衡瀏覽率的 Threads、FB 與短影音內容"></textarea>' +
       '<div class="hq-channels">' + CHANNELS.map(function (c) { return '<label class="hq-check"><input type="checkbox" data-hq-channel="' + c.id + '"' + (c.id !== "line" ? ' checked' : '') + '> ' + c.label + '</label>'; }).join("") + '</div>' +
       '<div class="hq-videoengine"><b>🎬 影片流程：</b>腳本 → 分鏡 → 旁白 → 字幕 → MP4 → YouTube／TikTok 發布。<br><span id="hqVideoState">' + E(videoStateText()) + '</span></div>' +
+      '<div class="hq-mode"><b>🚦 批准與發布模式</b>' +
+        '<label><input type="radio" name="hqApprovalMode" value="review"' + (approvalMode() === "review" ? " checked" : "") + '><span>先給我看，批准後執行<small>文案、腳本、分鏡全部展開；你按批准後才產生 MP4。</small></span></label>' +
+        '<label><input type="radio" name="hqApprovalMode" value="auto"' + (approvalMode() === "auto" ? " checked" : "") + '><span>免批准自動執行<small>品質檢查通過後自動產片；YouTube／TikTok 完成帳號授權後才會自動上傳。</small></span></label>' +
+      '</div>' +
       '<div class="hq-note">AI 會依目前主打產品建立快照，先做策略，再分平台產出，最後送你批准。</div>' +
       '<button class="btn" id="hqCreate">建立任務並開始產線 ▶</button><div id="hqCreateMsg"></div>' +
     '</div>' +
@@ -259,7 +274,7 @@
           (job.videoUrl ? '<video controls preload="metadata" poster="' + E(job.thumbnailUrl || "") + '" src="' + E(job.captionedVideoUrl || job.videoUrl) + '"></video><a href="' + E(job.captionedVideoUrl || job.videoUrl) + '" target="_blank" rel="noopener">⬇️ 開啟／下載 MP4</a>' : '') +
           (job.subtitleUrl ? '　<a href="' + E(job.subtitleUrl) + '" target="_blank" rel="noopener">下載字幕</a>' : '') + '</div>';
       }
-      return '<details class="hq-output"><summary>' + E(item ? item.label : (special[ch] || ch)) + '</summary><pre>' + E(t.outputs[ch]) + '</pre>' +
+      return '<details class="hq-output"' + (t.state === "approval" ? " open" : "") + '><summary>' + E(item ? item.label : (special[ch] || ch)) + '</summary><pre>' + E(t.outputs[ch]) + '</pre>' +
         (isVideo ? '<div class="hq-videoengine"><b>影片製作包：</b>腳本、旁白、字幕、分鏡已完成。<br><b>MP4：</b>' + E(job ? (job.status === "completed" ? "已完成，可預覽或下載。" : "正在 HeyGen 產生中。") : (videoConfigState.ready ? "批准後即可按鈕產生。" : "HeyGen API 尚未啟用。")) + '</div>' + videoBox : '') +
         '<button class="copy" data-hq-copy="' + E(t.id) + '" data-hq-copych="' + E(ch) + '">📋 複製</button></details>';
     }).join("");
@@ -283,7 +298,7 @@
       return '<div class="hq-minirow"><button class="hq-mini primary" data-hq-run="' + E(t.id) + '">啟動產線</button><button class="hq-mini hq-danger" data-hq-del="' + E(t.id) + '">刪除</button></div>';
     }
     if (t.state === "approval") {
-      return '<div class="hq-minirow"><button class="hq-mini" data-hq-return="' + E(t.id) + '">退回修改</button><button class="hq-mini primary" data-hq-approve="' + E(t.id) + '">批准進入發布佇列</button></div>';
+      return '<div class="hq-minirow"><button class="hq-mini" data-hq-return="' + E(t.id) + '">退回修改</button><button class="hq-mini primary" data-hq-approve="' + E(t.id) + '">批准並開始產片</button></div>';
     }
     if (t.state === "scheduled") {
       var channels = t.channels || [];
@@ -421,7 +436,9 @@
         if (!quality.pass) quality.summary = "已自動修改一次，仍有注意事項，交由老闆最後判斷。";
       }
 
-      updateTask(id, { state: "approval", outputs: outputs, quality: quality });
+      var nextState = t.approvalMode === "auto" ? "scheduled" : "approval";
+      updateTask(id, { state: nextState, outputs: outputs, quality: quality });
+      if (nextState === "scheduled") startApprovedVideos(id, true);
     } catch (err) {
       updateTask(id, { state: "failed", error: String(err && err.message ? err.message : err) });
     } finally {
@@ -441,7 +458,7 @@
     if (channels.indexOf("video") >= 0) employees.splice(2, 0, "短影音編導");
     if (channels.indexOf("tiktok") >= 0) employees.splice(employees.length - 1, 0, "TikTok 編導");
     if (channels.indexOf("youtube") >= 0) employees.splice(employees.length - 1, 0, "YouTube 製作人");
-    var t = { id: uid(), goal: goal, product: product, channels: channels, employees: employees, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
+    var t = { id: uid(), goal: goal, product: product, channels: channels, employees: employees, approvalMode: approvalMode(), state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
     var rows = read(); rows.unshift(t); write(rows);
     remoteUpsert(t); syncConfig();
     document.getElementById("hqGoal").value = "";
@@ -482,6 +499,18 @@
       mergeVideoJob(taskId, channel, { channel: channel, status: "failed", failure: String(err && err.message ? err.message : err), updatedAt: Date.now() });
     }
   }
+  async function startApprovedVideos(taskId, quiet) {
+    var task = findTask(taskId); if (!task) return;
+    var channels = (task.channels || []).filter(function (ch) { return ["video", "tiktok", "youtube"].indexOf(ch) >= 0; });
+    if (!videoConfigState.ready) {
+      if (!quiet) alert(videoStateText());
+      return;
+    }
+    for (var i = 0; i < channels.length; i++) {
+      var current = findTask(taskId), job = current && current.videoJobs && current.videoJobs[channels[i]];
+      if (!job || job.status === "failed") await startVideo(taskId, channels[i]);
+    }
+  }
   async function pollVideo(taskId, channel, quiet) {
     var task = findTask(taskId), job = task && task.videoJobs && task.videoJobs[channel];
     if (!job || !job.sessionId) return;
@@ -504,6 +533,8 @@
         if (job && job.sessionId && ["thinking", "generating", "pending", "processing"].indexOf(job.status) >= 0)
           scheduleVideoPoll(task.id, channel);
       });
+      if (task.state === "scheduled" && task.approvalMode === "auto")
+        startApprovedVideos(task.id, true);
     });
   }
 
@@ -531,10 +562,16 @@
       cloudState("☁️ 正在切換雲端總部");
       remoteHydrate(true).then(syncConfig);
     });
+    document.querySelectorAll('input[name="hqApprovalMode"]').forEach(function (input) {
+      input.addEventListener("change", function () {
+        saveApprovalMode(input.value);
+        syncConfig();
+      });
+    });
     document.getElementById("p_hq").addEventListener("click", function (ev) {
       var b = ev.target.closest("button"); if (!b) return;
       if (b.dataset.hqRun) runPipeline(b.dataset.hqRun);
-      if (b.dataset.hqApprove) { updateTask(b.dataset.hqApprove, { state: "scheduled", approvedAt: Date.now() }); render(); }
+      if (b.dataset.hqApprove) { updateTask(b.dataset.hqApprove, { state: "scheduled", approvedAt: Date.now() }); render(); startApprovedVideos(b.dataset.hqApprove, false); }
       if (b.dataset.hqReturn) { updateTask(b.dataset.hqReturn, { state: "returned", returnNote: "請加強具體案例與真人口吻。" }); render(); }
       if (b.dataset.hqDone) { updateTask(b.dataset.hqDone, { state: "done", publishedAt: Date.now() }); render(); }
       if (b.dataset.hqVideo) startVideo(b.dataset.hqVideo, b.dataset.hqVideoch);
