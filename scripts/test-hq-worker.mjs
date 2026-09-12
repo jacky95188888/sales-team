@@ -112,20 +112,21 @@ globalThis.fetch = async (input, init) => {
 };
 env.ANTHROPIC_KEY = "test-only-not-a-real-key";
 env.HEYGEN_API_KEY = "test-only-not-a-real-heygen-key";
-env.HQ_VIDEO_TOKEN = "test-video-token";
+const readyVideoConfig = await post("/video-config", { workspaceId });
+assert.equal(readyVideoConfig.ready, true);
 
 await post("/hq-tasks", { action: "upsert", workspaceId, task });
 const createdVideo = await post("/video-create", {
   workspaceId,
   taskId: task.id,
   channel: "tiktok",
-}, { "X-HQ-Video-Token": env.HQ_VIDEO_TOKEN });
+});
 assert.equal(createdVideo.job.sessionId, "sess_test");
 const finishedVideo = await post("/video-status", {
   workspaceId,
   taskId: task.id,
   channel: "tiktok",
-}, { "X-HQ-Video-Token": env.HQ_VIDEO_TOKEN });
+});
 assert.equal(finishedVideo.job.status, "completed");
 assert.equal(finishedVideo.job.videoUrl, "https://files.heygen.ai/test.mp4");
 await post("/hq-tasks", { action: "delete", workspaceId, taskId: task.id });
