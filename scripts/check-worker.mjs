@@ -21,6 +21,8 @@ const requiredRoutes = [
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/hq-config",
+  "/hq-tasks",
 ];
 
 for (const route of requiredRoutes) {
@@ -31,7 +33,11 @@ assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");
 assert.equal(config.kv_namespaces?.[0]?.binding, "MONITOR");
 assert.ok(config.kv_namespaces?.[0]?.id, "MONITOR namespace ID is missing");
-assert.deepEqual(config.triggers?.crons, ["0 0 * * *"]);
+assert.deepEqual(config.triggers?.crons, [
+  "0 1 * * *",
+  "0 6 * * *",
+  "0 13 * * *",
+]);
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
 
 const filesToScan = [

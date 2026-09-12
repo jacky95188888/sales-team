@@ -8,7 +8,8 @@ Cloudflare Worker.
 - Entry point: `sales-team-worker.js`
 - Configuration: `wrangler.jsonc`
 - KV binding: `MONITOR`
-- Scheduled trigger: `0 0 * * *`
+- Scheduled triggers: `0 1 * * *`, `0 6 * * *`, `0 13 * * *`
+  (Taiwan time 09:00, 14:00, and 21:00)
 - Required secret: `ANTHROPIC_KEY`
 - Optional push secrets: `VAPID_PUBLIC`, `VAPID_PRIVATE`, `VAPID_SUBJECT`
 
