@@ -16,6 +16,8 @@ const ROUTES = new Set([
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/hq-config",
+  "/hq-tasks",
 ]);
 const RULES = `使用繁體中文、台灣口語。食品保健不宣稱療效；不保證獲利或成功；命理標示僅供參考；價格與數據只能引用產品資料或搜尋來源。每項建議必須具體到做什麼、怎麼做、第一步。外部事實標【事實】，未查證推論標【推測】。`;
 const AGENTS = {
@@ -397,6 +399,82 @@ async function monitorSubscribe(env, b) {
   await env.MONITOR.put("subs", JSON.stringify(subs.slice(-100)));
   return { ok: true, count: Math.min(subs.length, 100) };
 }
+function hqWorkspaceId(value) {
+  const id = String(value || "")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 80);
+  if (id.length < 24)
+    throw Object.assign(new Error("HQ_WORKSPACE_REQUIRED"), { status: 400 });
+  return id;
+}
+function hqSafeObject(value, maxLength = 16000) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const text = JSON.stringify(value);
+  if (text.length > maxLength)
+    throw Object.assign(new Error("HQ_DATA_TOO_LARGE"), { status: 413 });
+  return JSON.parse(text);
+}
+async function hqRegisterWorkspace(env, id) {
+  const key = "hq:workspaces";
+  const ids = JSON.parse((await env.MONITOR.get(key)) || "[]").filter(
+    (x) => typeof x === "string",
+  );
+  if (!ids.includes(id)) {
+    ids.push(id);
+    await env.MONITOR.put(key, JSON.stringify(ids.slice(-20)));
+  }
+}
+async function hqConfig(env, b) {
+  if (!env.MONITOR) return { error: "尚未綁定 MONITOR KV" };
+  const id = hqWorkspaceId(b.workspaceId),
+    key = "hq:config:" + id;
+  if ((b.action || "list") === "list")
+    return { config: JSON.parse((await env.MONITOR.get(key)) || "null") };
+
+  const channels = (Array.isArray(b.channels) ? b.channels : [])
+    .filter((x) => ["thread", "fb", "video", "line"].includes(x))
+    .slice(0, 4);
+  const config = {
+    workspaceId: id,
+    autoEnabled: b.autoEnabled !== false,
+    profile: hqSafeObject(b.profile),
+    product: hqSafeObject(b.product, 8000),
+    channels: channels.length ? channels : ["thread", "fb", "video"],
+    updatedAt: Date.now(),
+  };
+  await env.MONITOR.put(key, JSON.stringify(config));
+  await hqRegisterWorkspace(env, id);
+  return { ok: true, config };
+}
+async function hqTasks(env, b) {
+  if (!env.MONITOR) return { error: "尚未綁定 MONITOR KV" };
+  const id = hqWorkspaceId(b.workspaceId),
+    key = "hq:tasks:" + id,
+    tasks = JSON.parse((await env.MONITOR.get(key)) || "[]");
+  if ((b.action || "list") === "list") return { tasks };
+
+  if (b.action === "delete") {
+    const taskId = String(b.taskId || "").slice(0, 100);
+    const next = tasks.filter((x) => x && x.id !== taskId);
+    await env.MONITOR.put(key, JSON.stringify(next));
+    return { ok: true, tasks: next };
+  }
+
+  const task = hqSafeObject(b.task, 120000);
+  if (!task.id || !task.goal)
+    throw Object.assign(new Error("HQ_TASK_INVALID"), { status: 400 });
+  task.id = String(task.id).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100);
+  task.goal = String(task.goal).slice(0, 2000);
+  task.updatedAt = Number(task.updatedAt) || Date.now();
+  const existing = tasks.find((x) => x && x.id === task.id);
+  if (existing && Number(existing.updatedAt || 0) > task.updatedAt)
+    return { ok: true, task: existing, ignoredOlderUpdate: true };
+  const next = tasks.filter((x) => x && x.id !== task.id);
+  next.unshift(task);
+  await env.MONITOR.put(key, JSON.stringify(next.slice(0, 80)));
+  await hqRegisterWorkspace(env, id);
+  return { ok: true, task };
+}
 function b64url(bytes) {
   let s = "";
   for (const n of bytes) s += String.fromCharCode(n);
@@ -442,7 +520,7 @@ async function sendPush(env, sub) {
     },
   });
 }
-async function scheduled(env) {
+async function monitorScheduled(env) {
   if (!env.MONITOR) return;
   const items = JSON.parse((await env.MONITOR.get("items")) || "[]"),
     notes = JSON.parse((await env.MONITOR.get("notes")) || "[]");
@@ -488,9 +566,142 @@ async function scheduled(env) {
       } catch {}
   }
 }
+function taiwanDay(now = Date.now()) {
+  return new Date(now + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+function hqProductName(config) {
+  return String(
+    config.product?.name ||
+      config.profile?.p_name ||
+      config.profile?.name ||
+      "目前主打產品",
+  ).slice(0, 100);
+}
+async function hqAutoTask(env, config, slot, today) {
+  const productName = hqProductName(config),
+    base = profile(config.profile) +
+      "\n【產品快照】\n" +
+      JSON.stringify(config.product || {}) +
+      "\n" +
+      RULES;
+  let goal = "",
+    strategy = "",
+    outputs = {},
+    employees = [],
+    quality = { pass: true, flags: [], summary: "自動任務已完成，等待老闆批准。" };
+
+  if (slot === "morning") {
+    goal = `${today} ${productName} 上午市場與社群情報`;
+    employees = ["市場情報員", "社群趨勢雷達", "策略主管"];
+    const result = await claude(
+      env,
+      base,
+      `今天是 ${today}。必須使用 web_search，為「${productName}」整理今天可用的市場情報：3個真實趨勢或熱門切角、來源、與產品的關聯、今天最值得做的第一步。不得編造數據。`,
+      1600,
+      true,
+    );
+    strategy = result.text;
+    outputs.brief = result.text +
+      (result.sources?.length
+        ? "\n\n【資料來源】\n" + result.sources.map((x) => `- ${x.title}：${x.url}`).join("\n")
+        : "");
+  } else if (slot === "afternoon") {
+    goal = `${today} ${productName} 下午多平台內容包`;
+    employees = ["內容企劃", "Threads 寫手", "FB 編輯", "短影音編導", "品質主管"];
+    const channels = (config.channels || ["thread", "fb", "video"]).join("、"),
+      result = await claude(
+        env,
+        base,
+        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"成品","line":"成品"}}；只保留要求的平台。`,
+        2600,
+      );
+    try {
+      const parsed = JSON.parse((result.text.match(/\{[\s\S]*\}/) || [])[0]);
+      strategy = String(parsed.strategy || "今日自動內容策略");
+      outputs = hqSafeObject(parsed.outputs, 60000);
+    } catch {
+      strategy = "AI 回傳格式需人工確認";
+      outputs.brief = result.text;
+      quality = { pass: false, flags: ["內容格式未完全結構化"], summary: "已保留原始內容，等待老闆確認。" };
+    }
+  } else {
+    goal = `${today} 晚上營運覆盤與明日第一步`;
+    employees = ["營運秘書", "成效分析員", "策略主管"];
+    const tasks = JSON.parse(
+      (await env.MONITOR.get("hq:tasks:" + config.workspaceId)) || "[]",
+    ).filter((x) => new Date(Number(x.createdAt || 0) + 8 * 60 * 60 * 1000).toISOString().slice(0, 10) === today);
+    const digest = tasks
+      .slice(0, 12)
+      .map((x) => ({ goal: x.goal, state: x.state, quality: x.quality?.summary }))
+      .slice(0, 12);
+    const result = await claude(
+      env,
+      base,
+      `今天是 ${today}。依今日任務紀錄 ${JSON.stringify(digest)}，寫一份100至250字營運覆盤：今天完成什麼、卡在哪裡、明天最重要的一件事。資料不足要明說，不可虛構成效數字。`,
+      700,
+    );
+    strategy = "每日營運覆盤";
+    outputs.review = result.text;
+  }
+
+  return {
+    id: `auto_${today.replace(/-/g, "")}_${slot}`,
+    goal,
+    product: config.product || { name: productName },
+    channels: Object.keys(outputs),
+    employees,
+    autoSlot: slot,
+    state: "approval",
+    strategy,
+    outputs,
+    quality,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+async function hqScheduled(env, event) {
+  if (!env.MONITOR) return;
+  const slot = {
+    "0 1 * * *": "morning",
+    "0 6 * * *": "afternoon",
+    "0 13 * * *": "evening",
+  }[event?.cron];
+  if (!slot) return;
+  const today = taiwanDay(),
+    workspaceIds = JSON.parse((await env.MONITOR.get("hq:workspaces")) || "[]").slice(-20);
+  for (const workspaceId of workspaceIds) {
+    const marker = `hq:auto:${workspaceId}:${today}:${slot}`;
+    if (await env.MONITOR.get(marker)) continue;
+    try {
+      const config = JSON.parse(
+        (await env.MONITOR.get("hq:config:" + workspaceId)) || "null",
+      );
+      if (!config?.autoEnabled) continue;
+      const task = await hqAutoTask(env, config, slot, today),
+        key = "hq:tasks:" + workspaceId,
+        tasks = JSON.parse((await env.MONITOR.get(key)) || "[]").filter(
+          (x) => x && x.id !== task.id,
+        );
+      tasks.unshift(task);
+      await env.MONITOR.put(key, JSON.stringify(tasks.slice(0, 80)));
+      await env.MONITOR.put(marker, "done", { expirationTtl: 172800 });
+    } catch (error) {
+      await env.MONITOR.put(
+        `hq:auto-error:${workspaceId}`,
+        JSON.stringify({ slot, at: Date.now(), error: String(error?.message || error).slice(0, 300) }),
+        { expirationTtl: 604800 },
+      );
+    }
+  }
+}
 export default {
   async scheduled(e, env, ctx) {
-    ctx.waitUntil(scheduled(env));
+    ctx.waitUntil(
+      Promise.all([
+        e?.cron === "0 1 * * *" ? monitorScheduled(env) : Promise.resolve(),
+        hqScheduled(env, e),
+      ]),
+    );
   },
   async fetch(req, env) {
     const H = cors(req),
@@ -528,6 +739,10 @@ export default {
         return json(await monitorConfig(env, b), 200, H);
       if (url.pathname === "/monitor-subscribe")
         return json(await monitorSubscribe(env, b), 200, H);
+      if (url.pathname === "/hq-config")
+        return json(await hqConfig(env, b), 200, H);
+      if (url.pathname === "/hq-tasks")
+        return json(await hqTasks(env, b), 200, H);
       if (url.pathname === "/vision-stats") {
         const t = await vision(
           env,
