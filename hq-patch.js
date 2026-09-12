@@ -11,7 +11,7 @@
   var WORKSPACE_KEY = "advisor_hq_workspace_v1";
   var currentRunId = null;
   var cloudBusy = false;
-  var videoConfigState = { ready: false, apiReady: false, ownerReady: false };
+  var videoConfigState = { ready: false, apiReady: false, apiValid: false, ownerReady: false };
   var videoPollers = {};
   var CHANNELS = [
     { id: "thread", label: "Threads 貼文" },
@@ -160,6 +160,7 @@
   function videoStateText() {
     if (videoConfigState.ready) return "✅ HeyGen MP4 引擎已就緒";
     if (!videoConfigState.apiReady) return "⚠️ HeyGen MP4 引擎尚未啟用";
+    if (!videoConfigState.apiValid) return "❌ HeyGen API 金鑰驗證失敗";
     return "⚠️ 目前同步碼尚未取得影片權限";
   }
   function checkVideoConfig() {
