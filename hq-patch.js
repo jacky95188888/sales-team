@@ -11,8 +11,7 @@
   var WORKSPACE_KEY = "advisor_hq_workspace_v1";
   var currentRunId = null;
   var cloudBusy = false;
-  var VIDEO_TOKEN_KEY = "advisor_hq_video_token_v1";
-  var videoConfigState = { ready: false, apiReady: false, accessReady: false };
+  var videoConfigState = { ready: false, apiReady: false, ownerReady: false };
   var videoPollers = {};
   var CHANNELS = [
     { id: "thread", label: "Threads 貼文" },
@@ -148,37 +147,24 @@
       }).finally(function () { cloudBusy = false; });
   }
 
-  function videoToken(ask) {
-    var token = "";
-    try { token = localStorage.getItem(VIDEO_TOKEN_KEY) || ""; } catch (_) {}
-    if (!token && ask) {
-      token = String(window.prompt("請輸入影片授權碼（只需第一次，會保存在這台裝置）：") || "").trim();
-      if (token) try { localStorage.setItem(VIDEO_TOKEN_KEY, token); } catch (_) {}
-    }
-    return token;
-  }
-  async function videoAPI(path, payload, askToken) {
-    var token = videoToken(askToken !== false);
+  async function videoAPI(path, payload) {
     var response = await fetch(WORKER_URL.replace(/\/$/, "") + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-HQ-Video-Token": token },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
     var data = await response.json();
-    if (data.error) {
-      if (response.status === 401) try { localStorage.removeItem(VIDEO_TOKEN_KEY); } catch (_) {}
-      throw new Error(data.error);
-    }
+    if (data.error) throw new Error(data.error);
     return data;
   }
   function videoStateText() {
     if (videoConfigState.ready) return "✅ HeyGen MP4 引擎已就緒";
     if (!videoConfigState.apiReady) return "⚠️ HeyGen MP4 引擎尚未啟用";
-    return "⚠️ 影片安全授權尚未完成";
+    return "⚠️ 目前同步碼尚未取得影片權限";
   }
   function checkVideoConfig() {
     if (typeof callAPI !== "function") return Promise.resolve();
-    return callAPI("/video-config", {}).then(function (data) {
+    return callAPI("/video-config", { workspaceId: workspaceId() }).then(function (data) {
       videoConfigState = data || videoConfigState;
       var el = document.getElementById("hqVideoState");
       if (el) el.textContent = videoStateText();
@@ -481,7 +467,7 @@
     try {
       var data = await videoAPI("/video-create", {
         workspaceId: workspaceId(), taskId: taskId, channel: channel
-      }, true);
+      });
       mergeVideoJob(taskId, channel, data.job);
       if (data.job.status !== "completed") scheduleVideoPoll(taskId, channel);
     } catch (err) {
@@ -494,7 +480,7 @@
     try {
       var data = await videoAPI("/video-status", {
         workspaceId: workspaceId(), taskId: taskId, channel: channel
-      }, !quiet);
+      });
       mergeVideoJob(taskId, channel, data.job);
       if (["thinking", "generating", "pending", "processing"].indexOf(data.job.status) >= 0)
         scheduleVideoPoll(taskId, channel);

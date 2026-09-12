@@ -49,7 +49,7 @@ function cors(req) {
   return {
     "Access-Control-Allow-Origin": o === ORIGIN ? o : ORIGIN,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-HQ-Video-Token",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -481,36 +481,44 @@ async function hqTasks(env, b) {
   return { ok: true, task };
 }
 
-function secureEqual(a, b) {
-  const left = String(a || ""), right = String(b || "");
-  if (!left || left.length !== right.length) return false;
-  let diff = 0;
-  for (let i = 0; i < left.length; i++)
-    diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
-  return diff === 0;
+async function videoOwner(env, workspaceId, claim) {
+  if (!env.MONITOR || !workspaceId) return false;
+  const id = hqWorkspaceId(workspaceId), key = "hq:video-owner-workspace";
+  let owner = await env.MONITOR.get(key);
+  if (!owner && claim) {
+    const config = await env.MONITOR.get("hq:config:" + id);
+    if (!config)
+      throw Object.assign(new Error("請先完成產品與雲端同步設定"), {
+        status: 409,
+      });
+    await env.MONITOR.put(key, id);
+    owner = id;
+  }
+  return owner === id;
 }
-function videoConfig(env) {
+async function videoConfig(env, b) {
+  let ownerReady = false;
+  try {
+    ownerReady = await videoOwner(env, b.workspaceId, true);
+  } catch {}
   return {
     provider: "heygen",
     apiReady: !!env.HEYGEN_API_KEY,
-    accessReady: !!env.HQ_VIDEO_TOKEN,
-    ready: !!env.HEYGEN_API_KEY && !!env.HQ_VIDEO_TOKEN,
+    ownerReady,
+    ready: !!env.HEYGEN_API_KEY && ownerReady,
     platforms: ["video", "tiktok", "youtube"],
   };
 }
-function requireVideoAccess(req, env) {
+async function requireVideoAccess(env, workspaceId) {
   if (!env.HEYGEN_API_KEY)
     throw Object.assign(
       new Error("HEYGEN_API_KEY 尚未設定，MP4 引擎目前未啟用"),
       { status: 503 },
     );
-  if (!env.HQ_VIDEO_TOKEN)
-    throw Object.assign(
-      new Error("HQ_VIDEO_TOKEN 尚未設定，影片授權目前未啟用"),
-      { status: 503 },
-    );
-  if (!secureEqual(req.headers.get("X-HQ-Video-Token"), env.HQ_VIDEO_TOKEN))
-    throw Object.assign(new Error("影片授權碼不正確"), { status: 401 });
+  if (!(await videoOwner(env, workspaceId, false)))
+    throw Object.assign(new Error("這個同步碼沒有影片產生權限"), {
+      status: 403,
+    });
 }
 async function hqTaskForVideo(env, workspaceId, taskId) {
   if (!env.MONITOR)
@@ -607,7 +615,7 @@ async function heygen(env, path, init = {}) {
   return data?.data || data;
 }
 async function videoCreate(req, env, b) {
-  requireVideoAccess(req, env);
+  await requireVideoAccess(env, b.workspaceId);
   const channel = String(b.channel || "");
   if (!["video", "tiktok", "youtube"].includes(channel))
     throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
@@ -658,7 +666,7 @@ async function videoCreate(req, env, b) {
   return { ok: true, job };
 }
 async function videoStatus(req, env, b) {
-  requireVideoAccess(req, env);
+  await requireVideoAccess(env, b.workspaceId);
   const channel = String(b.channel || "");
   if (!["video", "tiktok", "youtube"].includes(channel))
     throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
@@ -965,7 +973,7 @@ export default {
       if (url.pathname === "/hq-tasks")
         return json(await hqTasks(env, b), 200, H);
       if (url.pathname === "/video-config")
-        return json(videoConfig(env), 200, H);
+        return json(await videoConfig(env, b), 200, H);
       if (url.pathname === "/video-create")
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
