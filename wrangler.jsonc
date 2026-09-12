@@ -1,0 +1,17 @@
+{
+  "name": "sales-team",
+  "main": "sales-team-worker.js",
+  "compatibility_date": "2026-07-20",
+  "kv_namespaces": [
+    {
+      "binding": "MONITOR",
+      "id": "b7efbf250a7e4c958354f4e604b11407"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 0 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}
