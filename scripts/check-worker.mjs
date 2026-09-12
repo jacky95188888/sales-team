@@ -42,7 +42,7 @@ assert.deepEqual(config.triggers?.crons, [
   "0 13 * * *",
 ]);
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
-assert.deepEqual(config.secrets?.optional, ["HEYGEN_API_KEY", "HQ_VIDEO_TOKEN"]);
+assert.deepEqual(config.secrets?.optional, ["HEYGEN_API_KEY"]);
 
 const filesToScan = [
   worker,
