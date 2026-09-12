@@ -498,14 +498,26 @@ async function videoOwner(env, workspaceId, claim) {
 }
 async function videoConfig(env, b) {
   let ownerReady = false;
+  let apiValid = false;
+  let apiError = null;
   try {
     ownerReady = await videoOwner(env, b.workspaceId, true);
   } catch {}
+  if (env.HEYGEN_API_KEY) {
+    try {
+      await heygen(env, "/v3/users/me");
+      apiValid = true;
+    } catch (error) {
+      apiError = String(error?.message || error).slice(0, 200);
+    }
+  }
   return {
     provider: "heygen",
     apiReady: !!env.HEYGEN_API_KEY,
+    apiValid,
+    apiError,
     ownerReady,
-    ready: !!env.HEYGEN_API_KEY && ownerReady,
+    ready: apiValid && ownerReady,
     platforms: ["video", "tiktok", "youtube"],
   };
 }

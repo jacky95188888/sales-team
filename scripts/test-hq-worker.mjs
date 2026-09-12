@@ -76,6 +76,12 @@ assert.deepEqual(JSON.parse(await env.MONITOR.get("hq:workspaces")), [workspaceI
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
+  if (String(input).endsWith("/v3/users/me")) {
+    return new Response(JSON.stringify({ data: { id: "user_test" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   if (String(input).endsWith("/v3/video-agents") && init?.method === "POST") {
     return new Response(JSON.stringify({ data: { session_id: "sess_test", status: "generating", video_id: null } }), {
       status: 200,
