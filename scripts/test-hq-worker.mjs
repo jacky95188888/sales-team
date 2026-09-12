@@ -77,7 +77,7 @@ assert.deepEqual(JSON.parse(await env.MONITOR.get("hq:workspaces")), [workspaceI
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   if (String(input).endsWith("/v3/users/me")) {
-    return new Response(JSON.stringify({ data: { id: "user_test" } }), {
+    return new Response(JSON.stringify({ data: { id: "user_test", billing_type: "wallet", wallet: { currency: "credits", remaining_balance: 30 } } }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -120,6 +120,7 @@ env.ANTHROPIC_KEY = "test-only-not-a-real-key";
 env.HEYGEN_API_KEY = "test-only-not-a-real-heygen-key";
 const readyVideoConfig = await post("/video-config", { workspaceId });
 assert.equal(readyVideoConfig.ready, true);
+assert.equal(readyVideoConfig.billing.remaining, 30);
 
 await post("/hq-tasks", { action: "upsert", workspaceId, task });
 const createdVideo = await post("/video-create", {
