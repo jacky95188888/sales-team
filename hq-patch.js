@@ -1,5 +1,5 @@
 /* ============================================================
- * 三寶爸 AI 一人公司 — 營運總部 V1
+ * 三寶爸 AI 一人公司 — 營運總部 V2
  * ------------------------------------------------------------
  * 以附加頁方式串接現有 /content、/execute 能力，不覆寫原功能。
  * 任務、產品快照與產出先存於本機；正式跨裝置排程需 Worker 支援。
@@ -61,7 +61,7 @@
   function stateLabel(s) {
     return {
       queued: "等待啟動", strategy: "策略規劃中", producing: "內容製作中",
-      reviewing: "品質檢查中", approval: "等待你批准", returned: "退回修改",
+      reviewing: "AI 品質審核中", revising: "內容員自動修改中", approval: "等待你批准", returned: "退回修改",
       scheduled: "已批准排程", done: "已完成", failed: "需要處理"
     }[s] || s;
   }
@@ -98,7 +98,7 @@
 
   function pageHtml() {
     return '<div class="hq-hero">' +
-      '<div class="hq-head"><div><h2>🏢 三寶爸 AI 營運總部</h2><p>20 位 AI 員工・多產品獨立運作</p></div><span class="hq-live">● V1 本機產線</span></div>' +
+      '<div class="hq-head"><div><h2>🏢 三寶爸 AI 營運總部</h2><p>20 位 AI 員工・多產品獨立運作</p></div><span class="hq-live">● V2 AI 審稿產線</span></div>' +
       '<div class="hq-product" id="hqProduct"></div>' +
       '<div class="hq-points"><div class="hq-point"><b id="hqMorning">0</b><span>上午商機</span></div><div class="hq-point"><b id="hqAfternoon">0</b><span>下午產出</span></div><div class="hq-point"><b id="hqEvening">0</b><span>晚上覆盤</span></div></div>' +
     '</div>' +
@@ -128,7 +128,7 @@
   }
 
   function progressCount(state) {
-    return { queued: 1, strategy: 2, producing: 3, reviewing: 4, approval: 5, returned: 4, scheduled: 6, done: 6, failed: 3 }[state] || 1;
+    return { queued: 1, strategy: 2, producing: 3, reviewing: 4, revising: 5, approval: 6, returned: 5, scheduled: 7, done: 7, failed: 3 }[state] || 1;
   }
   function outputHtml(t) {
     if (!t.outputs) return "";
@@ -157,7 +157,8 @@
   function taskHtml(t) {
     var n = progressCount(t.state);
     return '<article class="hq-task"><div class="hq-tasktop"><div><h3>' + E(t.goal) + '</h3><div class="hq-meta">📦 ' + E(t.product ? t.product.name : "未設定產品") + '　·　' + E(nowText(t.updatedAt || t.createdAt)) + '</div></div><span class="hq-state ' + E(t.state) + '">' + E(stateLabel(t.state)) + '</span></div>' +
-      '<div class="hq-flow">' + [1,2,3,4,5,6].map(function (i) { return '<i class="hq-step' + (i <= n ? ' on' : '') + '"></i>'; }).join("") + '</div>' +
+      '<div class="hq-meta">👥 ' + E((t.employees || ["市場策略員", "內容創作員", "品質主管"]).join("・")) + '</div>' +
+      '<div class="hq-flow">' + [1,2,3,4,5,6,7].map(function (i) { return '<i class="hq-step' + (i <= n ? ' on' : '') + '"></i>'; }).join("") + '</div>' +
       (t.error ? '<div class="hq-error">' + E(t.error) + '</div>' : '') + qualityHtml(t) + outputHtml(t) + buttonsHtml(t) + '</article>';
   }
 
@@ -196,6 +197,37 @@
     return { pass: flags.length === 0, flags: flags, summary: flags.length ? "已完成初檢，批准前請查看標記。" : "通過具體性、罐頭句與品牌混用初檢。" };
   }
 
+  function reportsFromOutputs(outputs) {
+    return Object.keys(outputs || {}).map(function (ch) {
+      var item = CHANNELS.find(function (x) { return x.id === ch; });
+      return { agent: item ? item.label + "內容員" : ch + "內容員", output: outputs[ch] };
+    });
+  }
+
+  async function aiReview(task, outputs) {
+    try {
+      var review = await callAPI("/review", {
+        task: task.goal,
+        profile: typeof getProfile === "function" ? getProfile() : null,
+        reports: reportsFromOutputs(outputs),
+        hqTaskId: task.id,
+        productSnapshot: task.product
+      });
+      var flags = [];
+      if (review.issues) flags.push(String(review.issues));
+      return {
+        pass: !!review.pass,
+        flags: flags,
+        fix: String(review.fix || ""),
+        summary: review.pass ? "AI 品質主管審核通過，可送老闆批准。" : "AI 品質主管已退回，內容員正在依意見修改。"
+      };
+    } catch (_) {
+      var fallback = localQuality(Object.assign({}, task, { outputs: outputs }));
+      fallback.summary = "AI 審核暫時無回應，已改用本機品質規則完成檢查。";
+      return fallback;
+    }
+  }
+
   async function runPipeline(id) {
     if (currentRunId) return;
     var t = findTask(id); if (!t) return;
@@ -226,8 +258,29 @@
       }
       updateTask(id, { state: "reviewing", outputs: outputs }); render();
       var latest = findTask(id);
-      var quality = localQuality(latest);
-      updateTask(id, { state: "approval", quality: quality });
+      var quality = await aiReview(latest, outputs);
+
+      if (!quality.pass) {
+        updateTask(id, { state: "revising", quality: quality }); render();
+        var revised = {};
+        for (var j = 0; j < t.channels.length; j++) {
+          var reviseChannel = t.channels[j];
+          var oldOutput = outputs[reviseChannel] || "";
+          var revisedResult = await callAPI("/execute", {
+            task: t.goal + "\n\n【原稿】\n" + oldOutput + "\n\n【品質主管問題】\n" + (quality.flags || []).join("\n") + "\n\n【指定修法】\n" + (quality.fix || "改得更具體、更像真人，保留正確資訊。") + "\n\n請直接交付修改後成品，不要解釋修改過程。",
+            profile: typeof getProfile === "function" ? getProfile() : null,
+            reports: [], channel: reviseChannel, hqTaskId: id, productSnapshot: t.product
+          });
+          revised[reviseChannel] = revisedResult.output || revisedResult.content || JSON.stringify(revisedResult);
+          updateTask(id, { outputs: revised }); render();
+        }
+        outputs = revised;
+        updateTask(id, { state: "reviewing", outputs: outputs }); render();
+        quality = await aiReview(findTask(id), outputs);
+        if (!quality.pass) quality.summary = "已自動修改一次，仍有注意事項，交由老闆最後判斷。";
+      }
+
+      updateTask(id, { state: "approval", outputs: outputs, quality: quality });
     } catch (err) {
       updateTask(id, { state: "failed", error: String(err && err.message ? err.message : err) });
     } finally {
@@ -243,7 +296,9 @@
     if (!product) { msg.innerHTML = '<div class="hq-error">請先到「我的產品」新增並選定目前主打產品。</div>'; return; }
     var channels = Array.from(document.querySelectorAll("[data-hq-channel]:checked")).map(function (x) { return x.dataset.hqChannel; });
     if (!channels.length) { msg.innerHTML = '<div class="hq-error">至少選擇一種產出形式。</div>'; return; }
-    var t = { id: uid(), goal: goal, product: product, channels: channels, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
+    var employees = ["市場策略員", "內容創作員", "品質主管"];
+    if (channels.indexOf("video") >= 0) employees.splice(2, 0, "短影音編導");
+    var t = { id: uid(), goal: goal, product: product, channels: channels, employees: employees, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
     var rows = read(); rows.unshift(t); write(rows);
     document.getElementById("hqGoal").value = "";
     msg.innerHTML = '<div class="hq-working">✅ 任務已建立，AI 團隊開始接力。</div>';
