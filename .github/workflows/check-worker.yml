@@ -8,6 +8,7 @@ on:
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
+      - scripts/test-hq-worker.mjs
       - .github/workflows/check-worker.yml
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
+      - scripts/test-hq-worker.mjs
       - .github/workflows/check-worker.yml
 
 permissions:
@@ -36,4 +38,6 @@ jobs:
           node --check sales-team-worker.js
           node --check hq-patch.js
       - name: Check routes, bindings, schedule, and secrets
-        run: node scripts/check-worker.mjs
+        run: |
+          node scripts/check-worker.mjs
+          node scripts/test-hq-worker.mjs
