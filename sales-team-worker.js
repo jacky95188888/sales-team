@@ -18,6 +18,9 @@ const ROUTES = new Set([
   "/monitor-notes",
   "/hq-config",
   "/hq-tasks",
+  "/video-config",
+  "/video-create",
+  "/video-status",
 ]);
 const RULES = `使用繁體中文、台灣口語。食品保健不宣稱療效；不保證獲利或成功；命理標示僅供參考；價格與數據只能引用產品資料或搜尋來源。每項建議必須具體到做什麼、怎麼做、第一步。外部事實標【事實】，未查證推論標【推測】。`;
 const AGENTS = {
@@ -46,7 +49,7 @@ function cors(req) {
   return {
     "Access-Control-Allow-Origin": o === ORIGIN ? o : ORIGIN,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-HQ-Video-Token",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -477,6 +480,222 @@ async function hqTasks(env, b) {
   await hqRegisterWorkspace(env, id);
   return { ok: true, task };
 }
+
+function secureEqual(a, b) {
+  const left = String(a || ""), right = String(b || "");
+  if (!left || left.length !== right.length) return false;
+  let diff = 0;
+  for (let i = 0; i < left.length; i++)
+    diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  return diff === 0;
+}
+function videoConfig(env) {
+  return {
+    provider: "heygen",
+    apiReady: !!env.HEYGEN_API_KEY,
+    accessReady: !!env.HQ_VIDEO_TOKEN,
+    ready: !!env.HEYGEN_API_KEY && !!env.HQ_VIDEO_TOKEN,
+    platforms: ["video", "tiktok", "youtube"],
+  };
+}
+function requireVideoAccess(req, env) {
+  if (!env.HEYGEN_API_KEY)
+    throw Object.assign(
+      new Error("HEYGEN_API_KEY 尚未設定，MP4 引擎目前未啟用"),
+      { status: 503 },
+    );
+  if (!env.HQ_VIDEO_TOKEN)
+    throw Object.assign(
+      new Error("HQ_VIDEO_TOKEN 尚未設定，影片授權目前未啟用"),
+      { status: 503 },
+    );
+  if (!secureEqual(req.headers.get("X-HQ-Video-Token"), env.HQ_VIDEO_TOKEN))
+    throw Object.assign(new Error("影片授權碼不正確"), { status: 401 });
+}
+async function hqTaskForVideo(env, workspaceId, taskId) {
+  if (!env.MONITOR)
+    throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const id = hqWorkspaceId(workspaceId),
+    safeTaskId = String(taskId || "")
+      .replace(/[^A-Za-z0-9_-]/g, "")
+      .slice(0, 100),
+    key = "hq:tasks:" + id,
+    tasks = JSON.parse((await env.MONITOR.get(key)) || "[]"),
+    index = tasks.findIndex((item) => item && item.id === safeTaskId);
+  if (index < 0)
+    throw Object.assign(new Error("找不到這個影片任務"), { status: 404 });
+  const task = tasks[index];
+  if (!task.outputs || !Object.keys(task.outputs).length)
+    throw Object.assign(new Error("請先完成內容產線，再產生影片"), {
+      status: 409,
+    });
+  return { id, key, tasks, index, task };
+}
+async function saveVideoJob(env, record, channel, job) {
+  const task = record.tasks[record.index];
+  task.videoJobs = { ...(task.videoJobs || {}), [channel]: job };
+  task.updatedAt = Date.now();
+  record.tasks[record.index] = task;
+  await env.MONITOR.put(
+    record.key,
+    JSON.stringify(record.tasks.slice(0, 80)),
+  );
+  return task;
+}
+function videoPrompt(task, channel) {
+  const label =
+      channel === "youtube"
+        ? "YouTube 橫式影片"
+        : channel === "tiktok"
+          ? "TikTok 直式短影片"
+          : "Reels／Shorts 直式短影片",
+    duration = channel === "youtube" ? "約 90 秒" : "約 45 秒";
+  return [
+    `製作一支繁體中文、台灣口語的 ${label}，長度 ${duration}。`,
+    `主題：${String(task.goal || "").slice(0, 1000)}`,
+    `產品：${String(task.product?.name || "目前主打產品").slice(0, 120)}`,
+    "必須使用自然口吻、清楚字幕、前三秒有鉤子、畫面節奏明快；不得宣稱療效、保證獲利或成功。",
+    "以下是已通過內容產線的腳本與分鏡，請忠實製作，不要杜撰價格、數據或見證：",
+    String(task.outputs?.[channel] || task.outputs?.video || "").slice(0, 7500),
+  ]
+    .join("\n\n")
+    .slice(0, 10000);
+}
+async function videoRateLimit(env, workspaceId) {
+  const day = new Date().toISOString().slice(0, 10);
+  for (const [key, limit] of [
+    [`hq:video-usage:${day}:global`, 6],
+    [`hq:video-usage:${day}:${workspaceId}`, 3],
+  ]) {
+    const count = Number((await env.MONITOR.get(key)) || 0);
+    if (count >= limit)
+      throw Object.assign(
+        new Error("今日影片產生額度已用完，避免意外消耗 HeyGen 點數"),
+        { status: 429 },
+      );
+    await env.MONITOR.put(key, String(count + 1), {
+      expirationTtl: 172800,
+    });
+  }
+}
+async function heygen(env, path, init = {}) {
+  const response = await fetch("https://api.heygen.com" + path, {
+      ...init,
+      headers: {
+        "X-Api-Key": env.HEYGEN_API_KEY,
+        "Content-Type": "application/json",
+        ...(init.headers || {}),
+      },
+    }),
+    text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { error: text.slice(0, 300) };
+  }
+  if (!response.ok) {
+    const message =
+      data?.error?.message ||
+      data?.message ||
+      data?.error ||
+      `HeyGen ${response.status}`;
+    throw Object.assign(new Error(String(message).slice(0, 500)), {
+      status: response.status >= 500 ? 502 : response.status,
+    });
+  }
+  return data?.data || data;
+}
+async function videoCreate(req, env, b) {
+  requireVideoAccess(req, env);
+  const channel = String(b.channel || "");
+  if (!["video", "tiktok", "youtube"].includes(channel))
+    throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId);
+  if (
+    !record.task.channels?.includes(channel) ||
+    !record.task.outputs?.[channel]
+  )
+    throw Object.assign(new Error("這個任務沒有該平台的影片製作包"), {
+      status: 409,
+    });
+  const old = record.task.videoJobs?.[channel];
+  if (
+    old &&
+    [
+      "thinking",
+      "generating",
+      "pending",
+      "processing",
+      "completed",
+    ].includes(old.status)
+  )
+    return { ok: true, reused: true, job: old };
+  await videoRateLimit(env, record.id);
+  const result = await heygen(env, "/v3/video-agents", {
+    method: "POST",
+    body: JSON.stringify({
+      prompt: videoPrompt(record.task, channel),
+      mode: "generate",
+      orientation: channel === "youtube" ? "landscape" : "portrait",
+      incognito_mode: true,
+    }),
+  });
+  if (!result?.session_id)
+    throw Object.assign(new Error("HeyGen 沒有回傳影片工作編號"), {
+      status: 502,
+    });
+  const job = {
+    provider: "heygen",
+    channel,
+    sessionId: result.session_id,
+    videoId: result.video_id || null,
+    status: result.status || "generating",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  await saveVideoJob(env, record, channel, job);
+  return { ok: true, job };
+}
+async function videoStatus(req, env, b) {
+  requireVideoAccess(req, env);
+  const channel = String(b.channel || "");
+  if (!["video", "tiktok", "youtube"].includes(channel))
+    throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId),
+    old = record.task.videoJobs?.[channel];
+  if (!old?.sessionId)
+    throw Object.assign(new Error("這個平台尚未建立影片"), { status: 404 });
+  if (old.status === "completed" && old.videoUrl)
+    return { ok: true, job: old };
+
+  const session = await heygen(
+      env,
+      "/v3/video-agents/" + encodeURIComponent(old.sessionId),
+    ),
+    videoId = session?.video_id || old.videoId || null;
+  let video = null;
+  if (videoId)
+    video = await heygen(env, "/v3/videos/" + encodeURIComponent(videoId));
+  const status = video?.status || session?.status || old.status || "processing",
+    job = {
+      ...old,
+      videoId,
+      status,
+      progress: session?.progress ?? null,
+      videoUrl: video?.video_url || old.videoUrl || null,
+      captionedVideoUrl:
+        video?.captioned_video_url || old.captionedVideoUrl || null,
+      thumbnailUrl: video?.thumbnail_url || old.thumbnailUrl || null,
+      subtitleUrl: video?.subtitle_url || old.subtitleUrl || null,
+      duration: video?.duration ?? old.duration ?? null,
+      failure:
+        video?.failure_message || session?.failure_message || null,
+      updatedAt: Date.now(),
+    };
+  await saveVideoJob(env, record, channel, job);
+  return { ok: true, job };
+}
 function b64url(bytes) {
   let s = "";
   for (const n of bytes) s += String.fromCharCode(n);
@@ -745,6 +964,12 @@ export default {
         return json(await hqConfig(env, b), 200, H);
       if (url.pathname === "/hq-tasks")
         return json(await hqTasks(env, b), 200, H);
+      if (url.pathname === "/video-config")
+        return json(videoConfig(env), 200, H);
+      if (url.pathname === "/video-create")
+        return json(await videoCreate(req, env, b), 200, H);
+      if (url.pathname === "/video-status")
+        return json(await videoStatus(req, env, b), 200, H);
       if (url.pathname === "/vision-stats") {
         const t = await vision(
           env,

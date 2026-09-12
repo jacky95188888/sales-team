@@ -23,6 +23,9 @@ const requiredRoutes = [
   "/monitor-notes",
   "/hq-config",
   "/hq-tasks",
+  "/video-config",
+  "/video-create",
+  "/video-status",
 ];
 
 for (const route of requiredRoutes) {
@@ -39,6 +42,7 @@ assert.deepEqual(config.triggers?.crons, [
   "0 13 * * *",
 ]);
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
+assert.deepEqual(config.secrets?.optional, ["HEYGEN_API_KEY", "HQ_VIDEO_TOKEN"]);
 
 const filesToScan = [
   worker,
