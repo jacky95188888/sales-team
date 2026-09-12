@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - sales-team-worker.js
+      - hq-patch.js
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
@@ -13,6 +14,7 @@ on:
       - main
     paths:
       - sales-team-worker.js
+      - hq-patch.js
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
@@ -30,6 +32,8 @@ jobs:
         with:
           node-version: 20
       - name: Check Worker syntax
-        run: node --check sales-team-worker.js
+        run: |
+          node --check sales-team-worker.js
+          node --check hq-patch.js
       - name: Check routes, bindings, schedule, and secrets
         run: node scripts/check-worker.mjs
