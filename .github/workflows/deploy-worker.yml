@@ -1,0 +1,60 @@
+name: Deploy Sales Team Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DEPLOY to update the production Worker
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sales-team-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate source and configuration
+        run: |
+          node --check sales-team-worker.js
+          node scripts/check-worker.mjs
+
+      - name: Require protected credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$ANTHROPIC_KEY"
+
+      - name: Deploy Worker and store Anthropic key as a Secret
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 22bd6a71b50e9eeaa0daa802615a3459
+          wranglerVersion: "4"
+          command: deploy --config wrangler.jsonc
+          secrets: |
+            ANTHROPIC_KEY
+        env:
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+
+      - name: Verify public Worker endpoint
+        run: |
+          status=$(curl --silent --show-error --output response.json --write-out '%{http_code}' \
+            --header 'Origin: https://jacky95188888.github.io' \
+            https://sales-team.rhtm9y855y.workers.dev/monitor-notes)
+          test "$status" = "200"
+          jq -e 'has("notes")' response.json >/dev/null
