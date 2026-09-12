@@ -32,6 +32,7 @@ assert.equal(config.main, "sales-team-worker.js");
 assert.equal(config.kv_namespaces?.[0]?.binding, "MONITOR");
 assert.ok(config.kv_namespaces?.[0]?.id, "MONITOR namespace ID is missing");
 assert.deepEqual(config.triggers?.crons, ["0 0 * * *"]);
+assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
 
 const filesToScan = [
   worker,
