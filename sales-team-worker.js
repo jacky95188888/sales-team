@@ -500,13 +500,47 @@ async function videoConfig(env, b) {
   let ownerReady = false;
   let apiValid = false;
   let apiError = null;
+  let billing = null;
+  let creditReady = true;
   try {
     ownerReady = await videoOwner(env, b.workspaceId, true);
   } catch {}
   if (env.HEYGEN_API_KEY) {
     try {
-      await heygen(env, "/v3/users/me");
+      const account = await heygen(env, "/v3/users/me");
       apiValid = true;
+      if (ownerReady && account?.billing_type === "wallet") {
+        const remaining = Number(account.wallet?.remaining_balance);
+        billing = {
+          type: "wallet",
+          currency: String(account.wallet?.currency || "credits"),
+          remaining: Number.isFinite(remaining) ? remaining : null,
+        };
+        if (Number.isFinite(remaining)) creditReady = remaining >= 0.5;
+      } else if (ownerReady && account?.billing_type === "subscription") {
+        const premium = Number(
+            account.subscription?.credits?.premium_credits?.remaining,
+          ),
+          addOn = Number(
+            account.subscription?.credits?.add_on_credits?.remaining,
+          );
+        billing = {
+          type: "subscription",
+          plan: String(account.subscription?.plan || "unknown"),
+          premium: Number.isFinite(premium) ? premium : null,
+          addOn: Number.isFinite(addOn) ? addOn : null,
+        };
+        if (Number.isFinite(premium) || Number.isFinite(addOn))
+          creditReady = (Number.isFinite(premium) ? premium : 0) +
+              (Number.isFinite(addOn) ? addOn : 0) >=
+            0.5;
+      } else if (ownerReady && account?.billing_type === "usage_based") {
+        billing = {
+          type: "usage_based",
+          spendingCurrent: account.usage_based?.spending_current_usd ?? null,
+          spendingCap: account.usage_based?.spending_cap_usd ?? null,
+        };
+      }
     } catch (error) {
       apiError = String(error?.message || error).slice(0, 200);
     }
@@ -517,7 +551,9 @@ async function videoConfig(env, b) {
     apiValid,
     apiError,
     ownerReady,
-    ready: apiValid && ownerReady,
+    creditReady,
+    billing,
+    ready: apiValid && ownerReady && creditReady,
     platforms: ["video", "tiktok", "youtube"],
   };
 }

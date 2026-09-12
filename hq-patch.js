@@ -11,7 +11,7 @@
   var WORKSPACE_KEY = "advisor_hq_workspace_v1";
   var currentRunId = null;
   var cloudBusy = false;
-  var videoConfigState = { ready: false, apiReady: false, apiValid: false, ownerReady: false };
+  var videoConfigState = { ready: false, apiReady: false, apiValid: false, ownerReady: false, creditReady: true, billing: null };
   var videoPollers = {};
   var CHANNELS = [
     { id: "thread", label: "Threads 貼文" },
@@ -158,9 +158,16 @@
     return data;
   }
   function videoStateText() {
-    if (videoConfigState.ready) return "✅ HeyGen MP4 引擎已就緒";
+    var billing = videoConfigState.billing;
+    var balance = "";
+    if (billing && billing.type === "wallet" && billing.remaining != null)
+      balance = "・API 餘額 " + billing.remaining + " " + (billing.currency || "credits");
+    if (billing && billing.type === "subscription")
+      balance = "・API 點數 " + ((billing.premium || 0) + (billing.addOn || 0));
+    if (videoConfigState.ready) return "✅ HeyGen MP4 引擎已就緒" + balance;
     if (!videoConfigState.apiReady) return "⚠️ HeyGen MP4 引擎尚未啟用";
     if (!videoConfigState.apiValid) return "❌ HeyGen API 金鑰驗證失敗";
+    if (videoConfigState.creditReady === false) return "❌ 目前這把 API Key 的可用餘額不足 0.5" + balance;
     return "⚠️ 目前同步碼尚未取得影片權限";
   }
   function checkVideoConfig() {
