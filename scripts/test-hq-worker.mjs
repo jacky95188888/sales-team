@@ -40,12 +40,14 @@ await post("/hq-config", {
   action: "save",
   workspaceId,
   autoEnabled: true,
+  approvalMode: "review",
   profile: { p_name: "天衡" },
   product: { name: "天衡" },
   channels: ["thread", "fb", "invalid"],
 });
 const config = await post("/hq-config", { action: "list", workspaceId });
 assert.equal(config.config.autoEnabled, true);
+assert.equal(config.config.approvalMode, "review");
 assert.deepEqual(config.config.channels, ["thread", "fb"]);
 
 const task = {
