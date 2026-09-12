@@ -15,6 +15,7 @@
     "enabled": true
   },
   "secrets": {
-    "required": ["ANTHROPIC_KEY"]
+    "required": ["ANTHROPIC_KEY"],
+    "optional": ["HEYGEN_API_KEY", "HQ_VIDEO_TOKEN"]
   }
 }
