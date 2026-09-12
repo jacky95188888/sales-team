@@ -14,7 +14,9 @@
   var CHANNELS = [
     { id: "thread", label: "Threads 貼文" },
     { id: "fb", label: "Facebook 長文" },
-    { id: "video", label: "短影音腳本" },
+    { id: "video", label: "Reels／Shorts 短影音" },
+    { id: "tiktok", label: "TikTok 直式影片" },
+    { id: "youtube", label: "YouTube 完整影片" },
     { id: "line", label: "LINE 訊息" }
   ];
 
@@ -75,7 +77,7 @@
     return {
       queued: "等待啟動", strategy: "策略規劃中", producing: "內容製作中",
       reviewing: "AI 品質審核中", revising: "內容員自動修改中", approval: "等待你批准", returned: "退回修改",
-      scheduled: "已批准排程", done: "已完成", failed: "需要處理"
+      scheduled: "已批准・等待發布", done: "已完成", failed: "需要處理"
     }[s] || s;
   }
   function findTask(id) { return read().find(function (x) { return x.id === id; }); }
@@ -118,7 +120,7 @@
       autoEnabled: true,
       profile: typeof getProfile === "function" ? getProfile() : {},
       product: product,
-      channels: ["thread", "fb", "video"]
+      channels: ["thread", "fb", "video", "tiktok", "youtube"]
     }).then(function () {
       cloudState("☁️ 雲端同步完成・每日自動營運已開啟");
     }).catch(function () {
@@ -155,9 +157,11 @@
       .hq-titleline{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}.hq-titleline .lbl{margin:0}.hq-count{font-size:.69rem;color:var(--gold-lt);background:rgba(232,194,103,.12);border-radius:99px;padding:4px 8px}
       .hq-task{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:12px;margin-bottom:9px}.hq-tasktop{display:flex;align-items:flex-start;justify-content:space-between;gap:9px}.hq-task h3{font-size:.9rem;color:var(--ink);line-height:1.45}.hq-state{font-size:.68rem;color:#9dc8ff;white-space:nowrap}.hq-state.approval{color:#ffd27a}.hq-state.failed{color:#ffaaa4}.hq-meta{font-size:.7rem;color:var(--ink-soft);margin-top:4px}.hq-flow{display:flex;gap:3px;margin-top:9px}.hq-step{height:4px;flex:1;border-radius:9px;background:rgba(255,255,255,.12)}.hq-step.on{background:linear-gradient(90deg,var(--gold-dk),var(--gold-lt))}
       .hq-minirow{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.hq-mini{border:1px solid var(--purple);border-radius:9px;padding:7px 9px;background:#2c1f4d;color:var(--ink);font-size:.72rem}.hq-mini.primary{border-color:var(--gold);color:#3a2400;background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));font-weight:700}
+      .hq-mini:disabled{opacity:.55;filter:saturate(.5)}
       .hq-channels{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.hq-check{display:flex;align-items:center;gap:7px;padding:9px;border:1px solid rgba(169,139,216,.25);border-radius:10px;background:rgba(20,13,38,.45);font-size:.76rem;color:var(--ink-soft)}.hq-check input{width:17px;height:17px;accent-color:var(--gold-dk)}
       .hq-note{font-size:.73rem;color:var(--ink-soft);margin-top:8px}.hq-error{font-size:.74rem;color:#ffb3b3;margin-top:8px;white-space:pre-wrap}.hq-working{font-size:.78rem;color:var(--gold-lt);padding:9px 0;text-align:center}
       .hq-output{margin-top:9px;border-top:1px solid rgba(255,255,255,.1);padding-top:9px}.hq-output summary{color:var(--gold-lt);font-size:.78rem;cursor:pointer}.hq-output pre{white-space:pre-wrap;font-family:inherit;font-size:.78rem;color:var(--ink);margin-top:7px;max-height:280px;overflow:auto}.hq-output .copy{margin-top:7px}
+      .hq-videoengine{margin-top:8px;padding:8px 9px;border-radius:9px;border:1px solid rgba(255,202,95,.3);background:rgba(255,202,95,.07);font-size:.7rem;color:#f2d996}.hq-videoengine b{color:var(--gold-lt)}
       .hq-quality{margin-top:9px;border-radius:10px;padding:9px;background:rgba(20,13,38,.45);font-size:.72rem;color:var(--ink-soft)}.hq-quality b{color:var(--gold-lt)}
       .hq-empty{text-align:center;color:var(--ink-soft);font-size:.78rem;padding:18px 8px}.hq-danger{color:#ff9e98!important}
       .hq-cloud{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding:9px 10px;border-radius:11px;background:rgba(20,13,38,.5);border:1px solid rgba(145,215,180,.24);font-size:.7rem;color:#91d7b4}.hq-cloud button{border:1px solid rgba(169,139,216,.45);border-radius:8px;background:#2c1f4d;color:var(--ink);padding:5px 8px;font-size:.66rem}.hq-syncbox{display:none;margin-top:8px}.hq-syncbox.on{display:flex;gap:6px}.hq-syncbox input{min-width:0;flex:1;margin:0;padding:8px;font-size:.72rem}.hq-syncbox button{margin:0;width:auto;padding:8px 10px}
@@ -178,7 +182,8 @@
     '<div class="panel"><div class="hq-titleline"><label class="lbl">👑 等待老闆批准</label><span class="hq-count" id="hqApprovalCount">0 件</span></div><div id="hqApprovals"></div></div>' +
     '<div class="panel"><label class="lbl">➕ 交辦新任務</label>' +
       '<textarea id="hqGoal" placeholder="例：做一組能提高天衡瀏覽率的 Threads、FB 與短影音內容"></textarea>' +
-      '<div class="hq-channels">' + CHANNELS.map(function (c, i) { return '<label class="hq-check"><input type="checkbox" data-hq-channel="' + c.id + '"' + (i < 3 ? ' checked' : '') + '> ' + c.label + '</label>'; }).join("") + '</div>' +
+      '<div class="hq-channels">' + CHANNELS.map(function (c) { return '<label class="hq-check"><input type="checkbox" data-hq-channel="' + c.id + '"' + (c.id !== "line" ? ' checked' : '') + '> ' + c.label + '</label>'; }).join("") + '</div>' +
+      '<div class="hq-videoengine"><b>🎬 影片流程：</b>腳本 → 分鏡 → 旁白 → 字幕 → MP4 → YouTube／TikTok 發布。影片引擎與平台授權狀態會分開顯示，不再把腳本當成影片。</div>' +
       '<div class="hq-note">AI 會依目前主打產品建立快照，先做策略，再分平台產出，最後送你批准。</div>' +
       '<button class="btn" id="hqCreate">建立任務並開始產線 ▶</button><div id="hqCreateMsg"></div>' +
     '</div>' +
@@ -208,7 +213,10 @@
     return Object.keys(t.outputs).map(function (ch) {
       var item = CHANNELS.find(function (x) { return x.id === ch; });
       var special = { brief: "上午市場情報", review: "晚上營運覆盤" };
-      return '<details class="hq-output"><summary>' + E(item ? item.label : (special[ch] || ch)) + '</summary><pre>' + E(t.outputs[ch]) + '</pre><button class="copy" data-hq-copy="' + E(t.id) + '" data-hq-copych="' + E(ch) + '">📋 複製</button></details>';
+      var isVideo = ["video", "tiktok", "youtube"].indexOf(ch) >= 0;
+      return '<details class="hq-output"><summary>' + E(item ? item.label : (special[ch] || ch)) + '</summary><pre>' + E(t.outputs[ch]) + '</pre>' +
+        (isVideo ? '<div class="hq-videoengine"><b>目前成品：</b>影片製作包（腳本、旁白、字幕、分鏡）<br><b>MP4：</b>等待 HeyGen 網站 API 授權後才會真正生成。</div>' : '') +
+        '<button class="copy" data-hq-copy="' + E(t.id) + '" data-hq-copych="' + E(ch) + '">📋 複製</button></details>';
     }).join("");
   }
   function qualityHtml(t) {
@@ -221,10 +229,15 @@
       return '<div class="hq-minirow"><button class="hq-mini primary" data-hq-run="' + E(t.id) + '">啟動產線</button><button class="hq-mini hq-danger" data-hq-del="' + E(t.id) + '">刪除</button></div>';
     }
     if (t.state === "approval") {
-      return '<div class="hq-minirow"><button class="hq-mini" data-hq-return="' + E(t.id) + '">退回修改</button><button class="hq-mini primary" data-hq-approve="' + E(t.id) + '">批准排程</button></div>';
+      return '<div class="hq-minirow"><button class="hq-mini" data-hq-return="' + E(t.id) + '">退回修改</button><button class="hq-mini primary" data-hq-approve="' + E(t.id) + '">批准進入發布佇列</button></div>';
     }
     if (t.state === "scheduled") {
-      return '<div class="hq-minirow"><button class="hq-mini" data-hq-done="' + E(t.id) + '">標記已發布</button></div>';
+      var channels = t.channels || [];
+      var platformButtons = '';
+      if (channels.indexOf("youtube") >= 0) platformButtons += '<button class="hq-mini" disabled>▶ YouTube 待授權</button>';
+      if (channels.indexOf("tiktok") >= 0) platformButtons += '<button class="hq-mini" disabled>♪ TikTok 待授權</button>';
+      if (channels.indexOf("video") >= 0) platformButtons += '<button class="hq-mini" disabled>◎ Reels 待授權</button>';
+      return '<div class="hq-minirow">' + platformButtons + '<button class="hq-mini" data-hq-done="' + E(t.id) + '">手動發布完成</button></div>';
     }
     return "";
   }
@@ -372,6 +385,8 @@
     if (!channels.length) { msg.innerHTML = '<div class="hq-error">至少選擇一種產出形式。</div>'; return; }
     var employees = ["市場策略員", "內容創作員", "品質主管"];
     if (channels.indexOf("video") >= 0) employees.splice(2, 0, "短影音編導");
+    if (channels.indexOf("tiktok") >= 0) employees.splice(employees.length - 1, 0, "TikTok 編導");
+    if (channels.indexOf("youtube") >= 0) employees.splice(employees.length - 1, 0, "YouTube 製作人");
     var t = { id: uid(), goal: goal, product: product, channels: channels, employees: employees, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
     var rows = read(); rows.unshift(t); write(rows);
     remoteUpsert(t); syncConfig();

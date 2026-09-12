@@ -287,7 +287,9 @@ async function execute(env, b) {
     {
       fb: "FB貼文",
       thread: "Threads貼文",
-      video: "短影音腳本含前三秒鉤子與分鏡",
+      video: "Instagram Reels／YouTube Shorts短影音製作包，含前三秒鉤子、旁白、字幕與分鏡",
+      tiktok: "TikTok直式短影音製作包，含前三秒鉤子、旁白、字幕、鏡位與發布文案",
+      youtube: "YouTube影片製作包，含標題、縮圖文字、完整旁白、分鏡、字幕、說明欄與Shorts剪輯點",
       line: "LINE推播",
     }[b.channel] || "FB貼文";
   return (
@@ -432,14 +434,14 @@ async function hqConfig(env, b) {
     return { config: JSON.parse((await env.MONITOR.get(key)) || "null") };
 
   const channels = (Array.isArray(b.channels) ? b.channels : [])
-    .filter((x) => ["thread", "fb", "video", "line"].includes(x))
-    .slice(0, 4);
+    .filter((x) => ["thread", "fb", "video", "tiktok", "youtube", "line"].includes(x))
+    .slice(0, 6);
   const config = {
     workspaceId: id,
     autoEnabled: b.autoEnabled !== false,
     profile: hqSafeObject(b.profile),
     product: hqSafeObject(b.product, 8000),
-    channels: channels.length ? channels : ["thread", "fb", "video"],
+    channels: channels.length ? channels : ["thread", "fb", "video", "tiktok", "youtube"],
     updatedAt: Date.now(),
   };
   await env.MONITOR.put(key, JSON.stringify(config));
@@ -607,12 +609,12 @@ async function hqAutoTask(env, config, slot, today) {
         : "");
   } else if (slot === "afternoon") {
     goal = `${today} ${productName} 下午多平台內容包`;
-    employees = ["內容企劃", "Threads 寫手", "FB 編輯", "短影音編導", "品質主管"];
-    const channels = (config.channels || ["thread", "fb", "video"]).join("、"),
+    employees = ["內容企劃", "Threads 寫手", "FB 編輯", "短影音編導", "TikTok 編導", "YouTube 製作人", "品質主管"];
+    const channels = (config.channels || ["thread", "fb", "video", "tiktok", "youtube"]).join("、"),
       result = await claude(
         env,
         base,
-        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"成品","line":"成品"}}；只保留要求的平台。`,
+        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。影片平台必須包含可直接製作的旁白、字幕與逐鏡分鏡。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"Reels或Shorts製作包","tiktok":"TikTok製作包","youtube":"YouTube完整製作包","line":"成品"}}；只保留要求的平台。`,
         2600,
       );
     try {
