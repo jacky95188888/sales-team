@@ -1,0 +1,35 @@
+name: Worker Safety Checks
+
+on:
+  pull_request:
+    paths:
+      - sales-team-worker.js
+      - wrangler.jsonc
+      - WORKER-RECOVERY.md
+      - scripts/check-worker.mjs
+      - .github/workflows/check-worker.yml
+  push:
+    branches:
+      - main
+    paths:
+      - sales-team-worker.js
+      - wrangler.jsonc
+      - WORKER-RECOVERY.md
+      - scripts/check-worker.mjs
+      - .github/workflows/check-worker.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check Worker syntax
+        run: node --check sales-team-worker.js
+      - name: Check routes, bindings, schedule, and secrets
+        run: node scripts/check-worker.mjs
