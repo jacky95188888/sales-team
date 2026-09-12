@@ -442,6 +442,7 @@ async function hqConfig(env, b) {
   const config = {
     workspaceId: id,
     autoEnabled: b.autoEnabled !== false,
+    approvalMode: b.approvalMode === "auto" ? "auto" : "review",
     profile: hqSafeObject(b.profile),
     product: hqSafeObject(b.product, 8000),
     channels: channels.length ? channels : ["thread", "fb", "video", "tiktok", "youtube"],
@@ -675,6 +676,9 @@ async function videoCreate(req, env, b) {
     throw Object.assign(new Error("這個任務沒有該平台的影片製作包"), {
       status: 409,
     });
+  return createVideoForRecord(env, record, channel);
+}
+async function createVideoForRecord(env, record, channel) {
   const old = record.task.videoJobs?.[channel];
   if (
     old &&
@@ -928,7 +932,8 @@ async function hqAutoTask(env, config, slot, today) {
     channels: Object.keys(outputs),
     employees,
     autoSlot: slot,
-    state: "approval",
+    approvalMode: config.approvalMode === "auto" ? "auto" : "review",
+    state: config.approvalMode === "auto" ? "scheduled" : "approval",
     strategy,
     outputs,
     quality,
@@ -961,6 +966,26 @@ async function hqScheduled(env, event) {
         );
       tasks.unshift(task);
       await env.MONITOR.put(key, JSON.stringify(tasks.slice(0, 80)));
+      if (
+        slot === "afternoon" &&
+        config.approvalMode === "auto" &&
+        env.HEYGEN_API_KEY &&
+        (await videoOwner(env, workspaceId, false))
+      ) {
+        const record = { id: workspaceId, key, tasks, index: 0, task };
+        for (const channel of (task.channels || []).filter((name) =>
+          ["video", "tiktok", "youtube"].includes(name),
+        ))
+          try {
+            await createVideoForRecord(env, record, channel);
+          } catch (error) {
+            task.videoAutomationError = String(
+              error?.message || error,
+            ).slice(0, 300);
+            task.updatedAt = Date.now();
+            await env.MONITOR.put(key, JSON.stringify(tasks.slice(0, 80)));
+          }
+      }
       await env.MONITOR.put(marker, "done", { expirationTtl: 172800 });
     } catch (error) {
       await env.MONITOR.put(
