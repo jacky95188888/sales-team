@@ -15,19 +15,26 @@ const env = { MONITOR: new MemoryKV() };
 const origin = "https://jacky95188888.github.io";
 const workspaceId = "sanbao_0123456789abcdef0123456789abcdef0123";
 
-async function post(path, body) {
+async function request(path, body, headers = {}) {
   const response = await worker.fetch(
     new Request(`https://worker.example${path}`, {
       method: "POST",
-      headers: { Origin: origin, "Content-Type": "application/json" },
+      headers: { Origin: origin, "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
     }),
     env,
   );
   const data = await response.json();
+  return { response, data };
+}
+async function post(path, body, headers) {
+  const { response, data } = await request(path, body, headers);
   assert.equal(response.status, 200, JSON.stringify(data));
   return data;
 }
+
+const videoConfig = await post("/video-config", {});
+assert.equal(videoConfig.ready, false);
 
 await post("/hq-config", {
   action: "save",
@@ -45,7 +52,8 @@ const task = {
   id: "hq_test_1",
   goal: "建立今日內容",
   state: "approval",
-  outputs: { thread: "測試內容" },
+  channels: ["thread", "tiktok", "youtube"],
+  outputs: { thread: "測試內容", tiktok: "TikTok 腳本", youtube: "YouTube 腳本" },
   createdAt: 1,
   updatedAt: 2,
 };
@@ -68,6 +76,24 @@ assert.deepEqual(JSON.parse(await env.MONITOR.get("hq:workspaces")), [workspaceI
 
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
+  if (String(input).endsWith("/v3/video-agents") && init?.method === "POST") {
+    return new Response(JSON.stringify({ data: { session_id: "sess_test", status: "generating", video_id: null } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/video-agents/sess_test")) {
+    return new Response(JSON.stringify({ data: { session_id: "sess_test", status: "generating", video_id: "vid_test", progress: 60 } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/videos/vid_test")) {
+    return new Response(JSON.stringify({ data: { id: "vid_test", status: "completed", video_url: "https://files.heygen.ai/test.mp4", thumbnail_url: "https://files.heygen.ai/test.jpg", duration: 45 } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   if (String(input).includes("api.anthropic.com")) {
     const request = JSON.parse(init.body);
     const prompt = request.messages?.[0]?.content || "";
@@ -85,6 +111,24 @@ globalThis.fetch = async (input, init) => {
   return nativeFetch(input, init);
 };
 env.ANTHROPIC_KEY = "test-only-not-a-real-key";
+env.HEYGEN_API_KEY = "test-only-not-a-real-heygen-key";
+env.HQ_VIDEO_TOKEN = "test-video-token";
+
+await post("/hq-tasks", { action: "upsert", workspaceId, task });
+const createdVideo = await post("/video-create", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+}, { "X-HQ-Video-Token": env.HQ_VIDEO_TOKEN });
+assert.equal(createdVideo.job.sessionId, "sess_test");
+const finishedVideo = await post("/video-status", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+}, { "X-HQ-Video-Token": env.HQ_VIDEO_TOKEN });
+assert.equal(finishedVideo.job.status, "completed");
+assert.equal(finishedVideo.job.videoUrl, "https://files.heygen.ai/test.mp4");
+await post("/hq-tasks", { action: "delete", workspaceId, taskId: task.id });
 
 async function runCron(cron) {
   let pending;
