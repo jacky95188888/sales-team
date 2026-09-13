@@ -1,5 +1,5 @@
 /* ============================================================
- * 三寶爸 AI 一人公司 — 營運總部 V2
+ * AI 多品牌營運總部
  * ------------------------------------------------------------
  * 以附加頁方式串接現有 /content、/execute 能力，不覆寫原功能。
  * 任務、產品快照與產出先存於本機；正式跨裝置排程需 Worker 支援。
@@ -10,6 +10,9 @@
   var KEY = "advisor_hq_tasks_v1";
   var WORKSPACE_KEY = "advisor_hq_workspace_v1";
   var MODE_KEY = "advisor_hq_approval_mode_v1";
+  var PRESENTERS_KEY = "advisor_hq_presenters_v1";
+  var ACTIVE_PRESENTER_KEY = "advisor_hq_active_presenter_v1";
+  var PRODUCTION_KEY = "advisor_hq_production_profiles_v1";
   var currentRunId = null;
   var cloudBusy = false;
   var videoConfigState = { ready: false, apiReady: false, apiValid: false, ownerReady: false, creditReady: true, billing: null, avatarReady: false, avatar: null, voiceReady: false, voice: null };
@@ -61,7 +64,7 @@
     var bytes = new Uint8Array(18);
     if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
     else for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-    id = "sanbao_" + Array.from(bytes).map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
+    id = "hq_" + Array.from(bytes).map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
     try { localStorage.setItem(WORKSPACE_KEY, id); } catch (_) {}
     return id;
   }
@@ -76,6 +79,55 @@
   function currentProduct() {
     try { return typeof currentProductObj === "function" ? currentProductObj() : null; }
     catch (_) { return null; }
+  }
+  function readJson(key, fallback) {
+    try { var value = JSON.parse(localStorage.getItem(key) || "null"); return value == null ? fallback : value; }
+    catch (_) { return fallback; }
+  }
+  function presenterProfiles() {
+    var rows = readJson(PRESENTERS_KEY, []);
+    if (!Array.isArray(rows) || !rows.length) {
+      var profile = typeof getProfile === "function" ? (getProfile() || {}) : {};
+      rows = [{ id: "default", name: profile.name || profile.ownerName || "目前人物", appearancePrompt: "保留參考照片本人的臉部與身份特徵，專業、自然、真實比例" }];
+      try { localStorage.setItem(PRESENTERS_KEY, JSON.stringify(rows)); } catch (_) {}
+    }
+    return rows.slice(0, 20);
+  }
+  function activePresenterId() {
+    var rows = presenterProfiles(), id = "default";
+    try { id = localStorage.getItem(ACTIVE_PRESENTER_KEY) || "default"; } catch (_) {}
+    return rows.some(function (row) { return row.id === id; }) ? id : rows[0].id;
+  }
+  function activePresenter() {
+    var id = activePresenterId();
+    return presenterProfiles().find(function (row) { return row.id === id; }) || presenterProfiles()[0];
+  }
+  function productKey(product) {
+    return String(product && (product.p_name || product.name) || "default").trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff_-]+/g, "-").slice(0, 80) || "default";
+  }
+  function productionProfile(product) {
+    var all = readJson(PRODUCTION_KEY, {}), key = productKey(product), saved = all[key] || {};
+    return {
+      brandStyle: saved.brandStyle || "依產品定位自動建立一致的品牌視覺",
+      callToAction: saved.callToAction || "依內容提供一個自然、可執行的下一步",
+      totalSeconds: Math.max(15, Math.min(180, Number(saved.totalSeconds) || 45)),
+      presenterSeconds: Math.max(0, Math.min(30, Number(saved.presenterSeconds) || 12))
+    };
+  }
+  function currentProductionProfile() {
+    var p = currentProduct(), base = productionProfile(p);
+    var brand = document.getElementById("hqBrandStyle"), cta = document.getElementById("hqCTA"), total = document.getElementById("hqTotalSeconds"), presenter = document.getElementById("hqPresenterSeconds");
+    if (brand) base.brandStyle = String(brand.value || base.brandStyle).trim().slice(0, 500);
+    if (cta) base.callToAction = String(cta.value || base.callToAction).trim().slice(0, 500);
+    if (total) base.totalSeconds = Math.max(15, Math.min(180, Number(total.value) || base.totalSeconds));
+    if (presenter) base.presenterSeconds = Math.max(0, Math.min(30, Number(presenter.value) || base.presenterSeconds));
+    base.presenterSeconds = Math.min(base.presenterSeconds, base.totalSeconds);
+    return base;
+  }
+  function saveProductionProfile() {
+    var p = currentProduct(); if (!p) return;
+    var all = readJson(PRODUCTION_KEY, {}); all[productKey(p)] = currentProductionProfile();
+    try { localStorage.setItem(PRODUCTION_KEY, JSON.stringify(all)); } catch (_) {}
   }
   function productSnapshot() {
     var p = currentProduct();
@@ -138,6 +190,8 @@
       approvalMode: approvalMode(),
       profile: typeof getProfile === "function" ? getProfile() : {},
       product: product,
+      presenter: activePresenter(),
+      production: currentProductionProfile(),
       autoVideoEnabled: approvalMode() === "auto" && !!(document.getElementById("hqAutoPaidVideo") && document.getElementById("hqAutoPaidVideo").checked),
       channels: Array.isArray(selectedChannels) && selectedChannels.length ? selectedChannels : ["thread", "fb", "video"]
     }).then(function () {
@@ -181,20 +235,20 @@
       balance = "・API 餘額 " + billing.remaining + " " + (billing.currency || "credits");
     if (billing && billing.type === "subscription")
       balance = "・API 點數 " + ((billing.premium || 0) + (billing.addOn || 0));
-    if (videoConfigState.ready) return "✅ HeyGen MP4 引擎與三寶爸專屬人物已就緒" + balance;
+    if (videoConfigState.ready) return "✅ HeyGen MP4 引擎與「" + activePresenter().name + "」已就緒" + balance;
     if (!videoConfigState.apiReady) return "⚠️ HeyGen MP4 引擎尚未啟用";
     if (!videoConfigState.apiValid) return "❌ HeyGen API 金鑰驗證失敗";
     if (videoConfigState.creditReady === false) return "❌ 目前這把 API Key 的可用餘額不足 0.5" + balance;
     if (!videoConfigState.ownerReady) return "⚠️ 目前同步碼尚未取得影片權限";
-    if (!videoConfigState.avatarReady) return "⚠️ 請先建立三寶爸專屬人物，完成前不會產片或扣影片點數" + balance;
+    if (!videoConfigState.avatarReady) return "⚠️ 請先建立目前所選人物，完成前不會產片或扣影片點數" + balance;
     return "⚠️ 影片引擎尚未完成設定";
   }
   function avatarStateText() {
     var a = videoConfigState.avatar;
-    if (!a) return "尚未建立。請選擇你的正面照片，系統會製作深藍西裝專屬人物。";
-    if (a.status === "ready") return "✅ 三寶爸專屬人物完成，之後的新影片會固定使用你的臉。";
-    if (a.status === "building_style") return "⏳ 臉部已建立，正在製作深藍西裝全身造型。";
-    if (a.status === "building_face") return "⏳ 正在建立你的臉部人物，完成後會自動製作西裝造型。";
+    if (!a) return "尚未建立。請為「" + activePresenter().name + "」選擇正面照片。";
+    if (a.status === "ready") return "✅ 「" + activePresenter().name + "」已完成，新任務可選用這個人物。";
+    if (a.status === "building_style") return "⏳ 臉部已建立，正在製作人物造型。";
+    if (a.status === "building_face") return "⏳ 正在建立人物臉部，完成後會自動製作造型。";
     if (a.status === "failed") return "❌ 人物建立失敗：" + (a.failure || "請換一張正面照片重試");
     return "⏳ 專屬人物處理中。";
   }
@@ -211,9 +265,9 @@
   function voiceStateText() {
     var voice = videoConfigState.voice;
     if (!voice) return "尚未建立；新影片會先使用 HeyGen 預設聲音。";
-    if (voice.status === "ready") return "✅ 三寶爸專屬聲音已完成，之後的新影片會自動使用。";
+    if (voice.status === "ready") return "✅ 「" + activePresenter().name + "」的聲音已完成，之後的新影片可選用。";
     if (voice.status === "failed") return "❌ 聲音建立失敗：" + (voice.failure || "請重新錄製");
-    return "⏳ HeyGen 正在建立三寶爸專屬聲音。";
+    return "⏳ HeyGen 正在建立「" + activePresenter().name + "」的聲音。";
   }
   function renderVoiceState() {
     var state = document.getElementById("hqVoiceState");
@@ -238,7 +292,7 @@
   }
   async function pollVoice(quiet) {
     try {
-      var data = await videoAPI("/voice-status", { workspaceId: workspaceId() });
+      var data = await videoAPI("/voice-status", { workspaceId: workspaceId(), profileId: activePresenterId() });
       videoConfigState.voice = data.voice;
       videoConfigState.voiceReady = !!(data.voice && data.voice.status === "ready");
       renderVoiceState();
@@ -273,11 +327,12 @@
   }
   async function createVoice() {
     if (!recordedVoice) return;
+    saveCurrentSetup();
     var button = document.getElementById("hqVoiceCreate"); button.disabled = true; button.textContent = "聲音上傳中…";
     try {
-      var payload = await blobPayload(recordedVoice, "sanbao-voice");
+      var presenter = activePresenter(), payload = await blobPayload(recordedVoice, presenter.id + "-voice");
       if (payload.data.length > 6000000) throw new Error("錄音超過 4.5MB，請縮短後重錄。");
-      var data = await videoAPI("/voice-create", { workspaceId: workspaceId(), audio: payload.data, mediaType: payload.mediaType });
+      var data = await videoAPI("/voice-create", { workspaceId: workspaceId(), profileId: presenter.id, profileName: presenter.name, audio: payload.data, mediaType: payload.mediaType });
       videoConfigState.voice = data.voice; videoConfigState.voiceReady = false; renderVoiceState(); scheduleVoicePoll();
     } catch (err) { alert(String(err && err.message ? err.message : err)); }
     finally { button.disabled = false; button.textContent = "建立長期專屬聲音"; }
@@ -299,7 +354,7 @@
   }
   function checkVideoConfig() {
     if (typeof callAPI !== "function") return Promise.resolve();
-    return callAPI("/video-config", { workspaceId: workspaceId() }).then(function (data) {
+    return callAPI("/video-config", { workspaceId: workspaceId(), profileId: activePresenterId() }).then(function (data) {
       videoConfigState = data || videoConfigState;
       var el = document.getElementById("hqVideoState");
       if (el) el.textContent = videoStateText();
@@ -339,7 +394,9 @@
       .hq-focus{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:11px 12px;border:1px solid rgba(232,194,103,.42);border-radius:15px;background:linear-gradient(135deg,rgba(52,34,85,.96),rgba(25,17,47,.96));box-shadow:0 8px 22px rgba(0,0,0,.24)}.hq-focuspic{width:52px;height:52px;flex:0 0 52px;border-radius:50%;padding:2px;background:linear-gradient(145deg,var(--gold-lt),var(--gold-dk));box-shadow:0 0 13px rgba(232,194,103,.45)}.hq-focuspic img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}.hq-focusbody{min-width:0;flex:1}.hq-focuslabel{font-size:.63rem;color:var(--gold-lt);font-weight:800}.hq-focustext{font-size:.76rem;color:var(--ink);line-height:1.45;font-weight:750;margin-top:2px}.hq-focusnext{font-size:.64rem;color:var(--ink-soft);line-height:1.35;margin-top:2px}.hq-focus button{flex:0 0 auto;margin:0;padding:7px 9px;white-space:nowrap}.hq-archive{margin-top:10px;border-top:1px solid rgba(255,255,255,.1);padding-top:10px}.hq-archive>summary{cursor:pointer;color:var(--ink-soft);font-size:.74rem;list-style-position:inside}.hq-archive[open]>summary{margin-bottom:9px;color:var(--gold-lt)}.hq-actionnote{font-size:.63rem;color:var(--ink-soft);margin-top:6px}
       .hq-empty{text-align:center;color:var(--ink-soft);font-size:.78rem;padding:18px 8px}.hq-danger{color:#ff9e98!important}
       .hq-cloud{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding:9px 10px;border-radius:11px;background:rgba(20,13,38,.5);border:1px solid rgba(145,215,180,.24);font-size:.7rem;color:#91d7b4}.hq-cloud button{border:1px solid rgba(169,139,216,.45);border-radius:8px;background:#2c1f4d;color:var(--ink);padding:5px 8px;font-size:.66rem}.hq-syncbox{display:none;margin-top:8px}.hq-syncbox.on{display:flex;gap:6px}.hq-syncbox input{min-width:0;flex:1;margin:0;padding:8px;font-size:.72rem}.hq-syncbox button{margin:0;width:auto;padding:8px 10px}
+      .hq-config{margin:0 0 12px;padding:11px;border:1px solid rgba(232,194,103,.3);border-radius:12px;background:rgba(20,13,38,.42)}.hq-config h3{color:var(--gold-lt);font-size:.82rem;margin:0 0 9px}.hq-configgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hq-field{min-width:0}.hq-field.wide{grid-column:1/-1}.hq-field label{display:block;font-size:.64rem;color:var(--ink-soft);margin-bottom:4px}.hq-field input,.hq-field select,.hq-field textarea{width:100%;min-width:0;margin:0;padding:9px;border-radius:9px;border:1px solid rgba(169,139,216,.28);background:rgba(12,8,25,.65);color:var(--ink);font-size:.72rem;box-sizing:border-box}.hq-field textarea{min-height:64px}.hq-configactions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
       @media(max-width:420px){.hq-focus{align-items:flex-start;flex-wrap:wrap}.hq-focusbody{width:calc(100% - 64px)}.hq-focus button{width:100%;margin-left:62px}.hq-head{display:block}.hq-live{display:inline-block;margin-top:7px}}
+      @media(max-width:420px){.hq-configgrid{grid-template-columns:1fr}.hq-field.wide{grid-column:auto}}
       @media(max-width:360px){.hq-points{grid-template-columns:1fr}.hq-channels{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
@@ -347,7 +404,7 @@
 
   function pageHtml() {
     return '<div class="hq-hero">' +
-      '<div class="hq-head"><div><h2>🏢 三寶爸 AI 營運總部</h2><p>20 位 AI 員工・多產品獨立運作</p></div><span class="hq-live">● V2 AI 審稿產線</span></div>' +
+      '<div class="hq-head"><div><h2>🏢 AI 多品牌營運總部</h2><p>人物、產品、聲音與品牌設定皆可自由切換</p></div><span class="hq-live">● 通用製作產線</span></div>' +
       '<div class="hq-product" id="hqProduct"></div>' +
       '<div class="hq-cloud"><span id="hqCloudState">☁️ 雲端同步連線中</span><button id="hqSyncTools">同步工具</button></div>' +
       '<div class="hq-syncbox" id="hqSyncBox"><input id="hqWorkspaceInput" placeholder="貼上另一台裝置的同步碼"><button class="btn2" id="hqUseWorkspace">切換</button></div>' +
@@ -357,7 +414,17 @@
     '<div id="hqActiveNow"></div>' +
     '<div class="panel"><div class="hq-titleline"><label class="lbl">👑 等待老闆批准</label><span class="hq-count" id="hqApprovalCount">0 件</span></div><div id="hqApprovals"></div></div>' +
     '<div class="panel"><label class="lbl">➕ 交辦新任務</label>' +
-      '<textarea id="hqGoal" placeholder="例：做一組能提高天衡瀏覽率的 Threads、FB 與短影音內容"></textarea>' +
+      '<section class="hq-config"><h3>🧰 本次製作設定</h3><div class="hq-configgrid">' +
+        '<div class="hq-field"><label>使用產品</label><select id="hqProductSelect"></select></div>' +
+        '<div class="hq-field"><label>出鏡人物／聲音</label><select id="hqPresenterSelect"></select></div>' +
+        '<div class="hq-field"><label>人物名稱</label><input id="hqPresenterName" maxlength="60" placeholder="例：王小明／品牌顧問"></div>' +
+        '<div class="hq-field"><label>人物造型與場景</label><input id="hqAppearance" maxlength="500" placeholder="例：專業休閒服、明亮工作室、自然真實"></div>' +
+        '<div class="hq-field wide"><label>品牌視覺</label><input id="hqBrandStyle" maxlength="500" placeholder="例：深藍金、可信任、簡潔圖解"></div>' +
+        '<div class="hq-field wide"><label>影片行動引導</label><input id="hqCTA" maxlength="500" placeholder="例：留言關鍵字或前往產品頁"></div>' +
+        '<div class="hq-field"><label>影片總長（秒）</label><input id="hqTotalSeconds" type="number" min="15" max="180" value="45"></div>' +
+        '<div class="hq-field"><label>人物出鏡（秒）</label><input id="hqPresenterSeconds" type="number" min="0" max="30" value="12"></div>' +
+      '</div><div class="hq-configactions"><button class="hq-mini primary" id="hqSaveSetup" type="button">儲存目前設定</button><button class="hq-mini" id="hqManageProducts" type="button">新增／編輯產品</button><button class="hq-mini" id="hqNewPresenter" type="button">新增人物</button><button class="hq-mini hq-danger" id="hqDeletePresenter" type="button">刪除目前人物</button></div><div class="hq-note">設定會跟著本次任務保存；換產品或人物不會覆蓋其他組合。</div></section>' +
+      '<textarea id="hqGoal" placeholder="例：為目前選擇的產品製作 Threads、Facebook 與短影音內容"></textarea>' +
       '<div class="hq-compose"><strong>🗣️ 這次影片要怎麼產生內容？</strong>' +
         '<label class="hq-choice"><input type="radio" name="hqContentMode" value="auto" checked><span>AI 自動構建<small>你給主題，AI 自動安排觀點、腳本與畫面。</small></span></label>' +
         '<label class="hq-choice"><input type="radio" name="hqContentMode" value="statement"><span>以我的陳述為主<small>保留你的看法與語氣，AI 只負責整理、補強與分鏡。</small></span></label>' +
@@ -366,14 +433,14 @@
         '<details class="hq-materials"><summary>🖼️ 提供照片或素材</summary><input id="hqMaterialFiles" type="file" accept="image/jpeg,image/png,video/mp4,video/webm,audio/mpeg,audio/wav,audio/webm,application/pdf" multiple>' +
           '<div class="hq-scope"><label><input type="radio" name="hqAssetScope" value="once" checked>只用這一次</label><label><input type="radio" name="hqAssetScope" value="persistent">存入常用素材庫</label></div>' +
           '<div class="hq-note">每個檔案最多 4.5MB；常用素材不會自動套用，請在下方勾選才會使用。</div><div class="hq-assets" id="hqAssetLibrary"></div></details>' +
-        '<details class="hq-materials"><summary>🔊 三寶爸專屬聲音</summary><div class="hq-note" id="hqVoiceState">尚未錄製；新影片會先使用 HeyGen 預設聲音。</div>' +
+        '<details class="hq-materials"><summary>🔊 目前人物的專屬聲音</summary><div class="hq-note" id="hqVoiceState">尚未錄製；新影片會先使用 HeyGen 預設聲音。</div>' +
           '<div class="hq-subtools"><button class="hq-mini" id="hqVoiceRecord" type="button">● 開始錄音</button><button class="hq-mini primary" id="hqVoiceCreate" type="button" disabled>建立長期專屬聲音</button><button class="hq-mini" id="hqVoiceRefresh" type="button">查詢聲音進度</button></div><audio class="hq-voiceplayer" id="hqVoicePreview" controls style="display:none"></audio>' +
           '<div class="hq-avatarprivacy">請錄製約 30～60 秒安靜、清楚的本人聲音；建立後只套用在之後的新影片。</div></details>' +
       '</div>' +
       '<div class="hq-channels">' + CHANNELS.map(function (c) { return '<label class="hq-check"><input type="checkbox" data-hq-channel="' + c.id + '"' + (["thread","fb","video"].indexOf(c.id) >= 0 ? ' checked' : '') + '> ' + c.label + '</label>'; }).join("") + '</div>' +
       '<div class="hq-cost" id="hqVideoCost"></div>' +
       '<div class="hq-videoengine"><b>🎬 影片流程：</b>腳本 → 分鏡 → 旁白 → 字幕 → MP4 → 成品驗收 → 待發布。<br><span id="hqVideoState">' + E(videoStateText()) + '</span><br>發布連線：YouTube／TikTok 實際上傳端點尚未串接。<div class="hq-subtools"><button class="hq-mini" id="hqUsageRefresh" type="button">查看費用與產片紀錄</button></div><div class="hq-usage" id="hqUsageBox" style="display:none"></div></div>' +
-      '<div class="hq-avatar"><div class="hq-avatarhead"><img id="hqAvatarPreview" alt="三寶爸專屬人物預覽" style="display:none"><div><b>👤 三寶爸專屬人物</b><span id="hqAvatarState">' + E(avatarStateText()) + '</span></div></div>' +
+      '<div class="hq-avatar"><div class="hq-avatarhead"><img id="hqAvatarPreview" alt="目前人物預覽" style="display:none"><div><b id="hqAvatarTitle">👤 目前人物</b><span id="hqAvatarState">' + E(avatarStateText()) + '</span></div></div>' +
         '<div class="hq-avatarcontrols"><input id="hqAvatarFile" type="file" accept="image/jpeg,image/png"><button class="hq-mini primary" id="hqAvatarCreate" type="button">建立我的人物</button><button class="hq-mini" id="hqAvatarRefresh" type="button">查詢進度</button></div>' +
         '<div class="hq-avatarprivacy">照片只送往你的 HeyGen 帳號建立人物，不寫入公開網站；新影片完成前仍會先給你驗收。</div></div>' +
       '<div class="hq-mode"><b>🚦 批准與發布模式</b>' +
@@ -522,7 +589,7 @@
   function taskHtml(t) {
     var source = t.contentMode === "statement" ? "本人陳述" : "AI 自動構建", materialCount = Array.isArray(t.assets) ? t.assets.length : 0;
     return '<article class="hq-task" id="hq-task-' + E(t.id) + '"><div class="hq-tasktop"><div><h3>' + E(t.goal) + '</h3><div class="hq-meta">📦 ' + E(t.product ? t.product.name : "未設定產品") + '　·　' + E(nowText(t.updatedAt || t.createdAt)) + '</div></div><span class="hq-state ' + E(t.state) + '">' + E(stateLabel(t.state)) + '</span></div>' +
-      '<div class="hq-meta">🎙️ ' + E(source) + (materialCount ? '　・　🖼️ ' + materialCount + ' 個指定素材' : '') + '</div><div class="hq-meta">👥 ' + E((t.employees || ["市場策略員", "內容創作員", "品質主管"]).join("・")) + '</div>' + taskCrewHtml(t) +
+      '<div class="hq-meta">👤 ' + E(t.presenter && t.presenter.name ? t.presenter.name : "預設人物") + '　・　🎙️ ' + E(source) + (materialCount ? '　・　🖼️ ' + materialCount + ' 個指定素材' : '') + '</div><div class="hq-meta">👥 ' + E((t.employees || ["市場策略員", "內容創作員", "品質主管"]).join("・")) + '</div>' + taskCrewHtml(t) +
       (t.error ? '<div class="hq-error">' + E(t.error) + '</div>' : '') + qualityHtml(t) + outputHtml(t) + buttonsHtml(t) + '</article>';
   }
 
@@ -535,6 +602,55 @@
     return '<div class="hq-focus"><div class="hq-focuspic">' + (src ? '<img src="' + E(src) + '" alt="' + E(person.name) + '">' : '👤') + '</div>' +
       '<div class="hq-focusbody"><div class="hq-focuslabel">現在輪到 ' + E(person.name) + '・第 ' + stage.step + '／7 步</div><div class="hq-focustext">' + E(stage.work) + '</div><div class="hq-focusnext">' + E(stage.next) + '</div></div>' +
       '<button class="hq-mini primary" data-hq-focus="' + E(target) + '">' + E(button) + '</button></div>';
+  }
+
+  function renderConfigurator() {
+    var products = typeof getProds === "function" ? getProds() : [], productSelect = document.getElementById("hqProductSelect");
+    if (productSelect) {
+      var currentIndex = typeof getCurIdx === "function" ? getCurIdx() : 0;
+      productSelect.innerHTML = products.length ? products.map(function (p, i) { return '<option value="' + i + '"' + (i === currentIndex ? ' selected' : '') + '>' + E(p.p_name || "未命名產品") + '</option>'; }).join("") : '<option value="">請先新增產品</option>';
+    }
+    var people = presenterProfiles(), active = activePresenter(), presenterSelect = document.getElementById("hqPresenterSelect");
+    if (presenterSelect) presenterSelect.innerHTML = people.map(function (p) { return '<option value="' + E(p.id) + '"' + (p.id === active.id ? ' selected' : '') + '>' + E(p.name) + '</option>'; }).join("");
+    var name = document.getElementById("hqPresenterName"), appearance = document.getElementById("hqAppearance");
+    if (name) name.value = active.name || "";
+    if (appearance) appearance.value = active.appearancePrompt || "";
+    var production = productionProfile(currentProduct()), brand = document.getElementById("hqBrandStyle"), cta = document.getElementById("hqCTA"), total = document.getElementById("hqTotalSeconds"), seconds = document.getElementById("hqPresenterSeconds");
+    if (brand) brand.value = production.brandStyle;
+    if (cta) cta.value = production.callToAction;
+    if (total) total.value = production.totalSeconds;
+    if (seconds) seconds.value = production.presenterSeconds;
+    var title = document.getElementById("hqAvatarTitle"); if (title) title.textContent = "👤 " + active.name;
+  }
+  function saveCurrentSetup() {
+    var rows = presenterProfiles(), id = activePresenterId(), index = rows.findIndex(function (p) { return p.id === id; });
+    if (index >= 0) {
+      rows[index] = Object.assign({}, rows[index], {
+        name: String(document.getElementById("hqPresenterName").value || "未命名人物").trim().slice(0, 60) || "未命名人物",
+        appearancePrompt: String(document.getElementById("hqAppearance").value || "").trim().slice(0, 500)
+      });
+      try { localStorage.setItem(PRESENTERS_KEY, JSON.stringify(rows)); } catch (_) {}
+    }
+    saveProductionProfile(); renderConfigurator(); renderAvatarState(); renderVoiceState(); syncConfig();
+    var msg = document.getElementById("hqCreateMsg"); if (msg) msg.innerHTML = '<div class="hq-working">✅ 人物與產品製作設定已保存。</div>';
+  }
+  function addPresenter() {
+    var rows = presenterProfiles(); if (rows.length >= 20) { alert("人物最多 20 組。"); return; }
+    var id = "person_" + Date.now().toString(36), person = { id: id, name: "新人物 " + (rows.length + 1), appearancePrompt: "保留參考照片本人的臉部與身份特徵，專業、自然、真實比例" };
+    rows.push(person);
+    try { localStorage.setItem(PRESENTERS_KEY, JSON.stringify(rows)); localStorage.setItem(ACTIVE_PRESENTER_KEY, id); } catch (_) {}
+    videoConfigState.avatar = null; videoConfigState.voice = null; videoConfigState.ready = false;
+    renderConfigurator(); checkVideoConfig();
+  }
+  function deletePresenter() {
+    var rows = presenterProfiles(), id = activePresenterId();
+    if (rows.length <= 1) { alert("至少需要保留一個人物設定。"); return; }
+    var person = activePresenter();
+    if (!confirm("確定從工具列移除「" + person.name + "」嗎？已完成的舊任務不會被刪除。")) return;
+    rows = rows.filter(function (row) { return row.id !== id; });
+    try { localStorage.setItem(PRESENTERS_KEY, JSON.stringify(rows)); localStorage.setItem(ACTIVE_PRESENTER_KEY, rows[0].id); } catch (_) {}
+    videoConfigState.avatar = null; videoConfigState.voice = null; videoConfigState.ready = false;
+    renderConfigurator(); checkVideoConfig();
   }
 
   function render() {
@@ -595,7 +711,7 @@
     if (all.length < 180) flags.push("內容可能太短");
     if (!/[0-9０-９]|今天|最近|這週|第一步|先/.test(all)) flags.push("缺少具體時間或下一步");
     cliches.forEach(function (x) { if (all.indexOf(x) >= 0) flags.push("出現空泛句：" + x); });
-    var otherBrands = ["筠玲易數", "反詐實驗室", "電子收納櫃", "天衡・九維命理"].filter(function (x) { return !task.product || x !== task.product.name; });
+    var otherBrands = (typeof getProds === "function" ? getProds() : []).map(function (p) { return p.p_name || ""; }).filter(function (x) { return x && (!task.product || x !== task.product.name); });
     otherBrands.forEach(function (x) { if (all.indexOf(x) >= 0) flags.push("疑似混入其他品牌：" + x); });
     return { pass: flags.length === 0, flags: flags, summary: flags.length ? "已完成初檢，批准前請查看標記。" : "通過具體性、罐頭句與品牌混用初檢。" };
   }
@@ -638,8 +754,9 @@
     currentRunId = id;
     try {
       updateTask(id, { state: "strategy", error: "" }); render();
+      var presenterName = t.presenter && t.presenter.name ? t.presenter.name : "創作者";
       var sourceBrief = t.contentMode === "statement" && t.statement
-        ? t.goal + "\n\n【三寶爸親自陳述，必須保留核心立場與口吻】\n" + t.statement
+        ? t.goal + "\n\n【" + presenterName + "親自陳述，必須保留核心立場與口吻】\n" + t.statement
         : t.goal + "\n\n【內容來源】由 AI 自動構建，但必須具體、有觀點，不能寫成罐頭。";
       var plan = await callAPI("/content", {
         task: sourceBrief,
@@ -656,7 +773,7 @@
         var ch = t.channels[i];
         updateTask(id, { state: "producing", currentChannel: ch }); render();
         var videoBrief = ["video", "tiktok", "youtube"].indexOf(ch) >= 0
-          ? "\n\n【影音分鏡硬規則】提供逐字旁白、逐句字幕、時間碼與逐鏡畫面。不能整支人物站著念稿；每3～5秒換一次有意義的畫面。採六段式：動態問題鉤子→人物提出問題→旁白直接相關的情境素材→時間軸或對照圖解→人物具體解讀→行動引導。人物約40%、相關素材約40%、文字圖解約20%。"
+          ? "\n\n【本次影片設定】總長約 " + (t.production && t.production.totalSeconds || 45) + " 秒，人物出鏡合計約 " + (t.production && t.production.presenterSeconds || 12) + " 秒；品牌視覺：" + (t.production && t.production.brandStyle || "依產品定位") + "；行動引導：" + (t.production && t.production.callToAction || "提供自然的下一步") + "。\n【影音分鏡硬規則】提供逐字旁白、逐句字幕、時間碼與逐鏡畫面。不能整支人物站著念稿；每3～5秒換一次有意義的畫面。人物只負責關鍵開場、觀點或收尾，其餘使用與每句旁白直接相關的產品素材、操作畫面、情境 B-roll、圖表或動態字卡。"
           : "";
         var result = await callAPI("/execute", {
           task: sourceBrief + "\n\n【內容策略】\n" + strategy + "\n\n【品質要求】具體、台灣口語、避免罐頭、提供可執行下一步。" + videoBrief,
@@ -677,7 +794,7 @@
           var reviseChannel = t.channels[j];
           var oldOutput = outputs[reviseChannel] || "";
           var revisedResult = await callAPI("/execute", {
-            task: sourceBrief + "\n\n【原稿】\n" + oldOutput + "\n\n【品質主管問題】\n" + (quality.flags || []).join("\n") + "\n\n【指定修法】\n" + (quality.fix || "改得更具體、更像真人，保留正確資訊。") + "\n\n請直接交付修改後成品，不要解釋修改過程；不得改變三寶爸原始陳述的核心立場。",
+            task: sourceBrief + "\n\n【原稿】\n" + oldOutput + "\n\n【品質主管問題】\n" + (quality.flags || []).join("\n") + "\n\n【指定修法】\n" + (quality.fix || "改得更具體、更像真人，保留正確資訊。") + "\n\n請直接交付修改後成品，不要解釋修改過程；不得改變創作者原始陳述的核心立場。",
             profile: typeof getProfile === "function" ? getProfile() : null,
             reports: [], channel: reviseChannel, hqTaskId: id, productSnapshot: t.product
           });
@@ -715,7 +832,7 @@
         var prepared = await prepareAvatarImage(file);
         payload = { data: prepared.image, mediaType: prepared.mediaType, name: file.name.replace(/\.[^.]+$/, "") + ".jpg" };
       } else payload = await blobPayload(file, file.name);
-      var data = await videoAPI("/media-assets", { action: "upload", workspaceId: workspaceId(), scope: scope, name: payload.name || file.name, mediaType: payload.mediaType, data: payload.data });
+      var data = await videoAPI("/media-assets", { action: "upload", workspaceId: workspaceId(), productKey: productKey(currentProduct()), scope: scope, name: payload.name || file.name, mediaType: payload.mediaType, data: payload.data });
       selected.push(data.asset);
       if (scope === "persistent") assetLibrary.unshift(data.asset);
     }
@@ -750,7 +867,8 @@
     if (channels.indexOf("tiktok") >= 0) employees.splice(employees.length - 1, 0, "TikTok 編導");
     if (channels.indexOf("youtube") >= 0) employees.splice(employees.length - 1, 0, "YouTube 製作人");
     var autoVideoEnabled = approvalMode() === "auto" && !!document.getElementById("hqAutoPaidVideo").checked;
-    var t = { id: uid(), goal: goal, contentMode: contentMode, statement: statement.slice(0, 6000), assets: assets, product: product, channels: channels, employees: employees, approvalMode: approvalMode(), autoVideoEnabled: autoVideoEnabled, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
+    saveCurrentSetup();
+    var t = { id: uid(), goal: goal, contentMode: contentMode, statement: statement.slice(0, 6000), assets: assets, product: product, presenter: activePresenter(), production: currentProductionProfile(), channels: channels, employees: employees, approvalMode: approvalMode(), autoVideoEnabled: autoVideoEnabled, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
     var rows = read(); rows.unshift(t); write(rows);
     remoteUpsert(t); syncConfig(channels);
     document.getElementById("hqGoal").value = "";
@@ -779,7 +897,7 @@
   }
   async function pollAvatar(quiet) {
     try {
-      var data = await videoAPI("/avatar-status", { workspaceId: workspaceId() });
+      var data = await videoAPI("/avatar-status", { workspaceId: workspaceId(), profileId: activePresenterId() });
       videoConfigState.avatar = data.avatar;
       videoConfigState.avatarReady = data.avatar && data.avatar.status === "ready";
       videoConfigState.ready = !!(videoConfigState.apiValid && videoConfigState.ownerReady && videoConfigState.creditReady && videoConfigState.avatarReady);
@@ -822,8 +940,10 @@
     var button = document.getElementById("hqAvatarCreate");
     button.disabled = true; button.textContent = "人物建立中…";
     try {
+      saveCurrentSetup();
       var payload = await prepareAvatarImage(file);
-      var data = await videoAPI("/avatar-create", { workspaceId: workspaceId(), mediaType: payload.mediaType, image: payload.image });
+      var presenter = activePresenter();
+      var data = await videoAPI("/avatar-create", { workspaceId: workspaceId(), profileId: presenter.id, profileName: presenter.name, appearancePrompt: presenter.appearancePrompt, mediaType: payload.mediaType, image: payload.image });
       videoConfigState.avatar = data.avatar; videoConfigState.avatarReady = false; videoConfigState.ready = false;
       renderAvatarState();
       var el = document.getElementById("hqVideoState"); if (el) el.textContent = videoStateText();
@@ -841,12 +961,15 @@
       pollVideo(taskId, channel, true);
     }, 15000);
   }
-  async function startVideo(taskId, channel) {
-    if (!videoConfigState.ready) {
-      alert(videoStateText() + "。目前先保留完整腳本與分鏡，不會扣除影片點數。");
+  async function startVideo(taskId, channel, quiet) {
+    var task = findTask(taskId); if (!task) return;
+    var taskConfig;
+    try { taskConfig = await videoAPI("/video-config", { workspaceId: workspaceId(), profileId: task.presenter && task.presenter.id || "default" }); }
+    catch (err) { if (!quiet) alert(String(err && err.message ? err.message : err)); return; }
+    if (!taskConfig.ready) {
+      if (!quiet) alert("「" + (task.presenter && task.presenter.name || "目前人物") + "」尚未完成頭像／API 設定。目前保留腳本與分鏡，不會扣影片點數。");
       return;
     }
-    var task = findTask(taskId); if (!task) return;
     mergeVideoJob(taskId, channel, { channel: channel, status: "thinking", updatedAt: Date.now() }, false);
     try {
       var data = await videoAPI("/video-create", {
@@ -861,13 +984,9 @@
   async function startApprovedVideos(taskId, quiet) {
     var task = findTask(taskId); if (!task) return;
     var channels = (task.channels || []).filter(function (ch) { return ["video", "tiktok", "youtube"].indexOf(ch) >= 0; });
-    if (!videoConfigState.ready) {
-      if (!quiet) alert(videoStateText());
-      return;
-    }
     for (var i = 0; i < channels.length; i++) {
       var current = findTask(taskId), job = current && current.videoJobs && current.videoJobs[channels[i]];
-      if (!job || job.status === "failed") await startVideo(taskId, channels[i]);
+      if (!job || job.status === "failed") await startVideo(taskId, channels[i], quiet);
     }
   }
   async function pollVideo(taskId, channel, quiet) {
@@ -908,6 +1027,19 @@
 
   function bind() {
     document.getElementById("hqCreate").addEventListener("click", createTask);
+    document.getElementById("hqSaveSetup").addEventListener("click", saveCurrentSetup);
+    document.getElementById("hqNewPresenter").addEventListener("click", addPresenter);
+    document.getElementById("hqDeletePresenter").addEventListener("click", deletePresenter);
+    document.getElementById("hqManageProducts").addEventListener("click", function () { if (typeof switchTo === "function") switchTo("profile"); });
+    document.getElementById("hqProductSelect").addEventListener("change", function () {
+      var index = Number(this.value); if (typeof pickProduct === "function" && Number.isFinite(index)) pickProduct(index);
+      renderConfigurator(); render(); syncConfig();
+    });
+    document.getElementById("hqPresenterSelect").addEventListener("change", function () {
+      try { localStorage.setItem(ACTIVE_PRESENTER_KEY, this.value); } catch (_) {}
+      videoConfigState.avatar = null; videoConfigState.voice = null; videoConfigState.ready = false;
+      renderConfigurator(); renderAvatarState(); renderVoiceState(); checkVideoConfig();
+    });
     document.getElementById("hqAvatarCreate").addEventListener("click", createAvatar);
     document.getElementById("hqAvatarRefresh").addEventListener("click", function () { pollAvatar(false); });
     document.getElementById("hqDictate").addEventListener("click", function () { startDictation(this); });
@@ -979,7 +1111,7 @@
   }
 
   function init() {
-    addStyles(); injectPage(); bind(); hookSwitch(); render();
+    addStyles(); injectPage(); bind(); hookSwitch(); renderConfigurator(); render();
     remoteHydrate(false).then(function () { syncConfig(); resumeVideoPolling(); });
     loadAssetLibrary(); renderVideoCost();
     checkVideoConfig();

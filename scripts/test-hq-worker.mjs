@@ -43,12 +43,16 @@ await post("/hq-config", {
   approvalMode: "review",
   profile: { p_name: "天衡" },
   product: { name: "天衡" },
+  presenter: { id: "default", name: "目前人物" },
+  production: { brandStyle: "品牌藍與暖金", totalSeconds: 45, presenterSeconds: 12 },
   channels: ["thread", "fb", "invalid"],
 });
 const config = await post("/hq-config", { action: "list", workspaceId });
 assert.equal(config.config.autoEnabled, true);
 assert.equal(config.config.approvalMode, "review");
 assert.deepEqual(config.config.channels, ["thread", "fb"]);
+assert.equal(config.config.presenter.id, "default");
+assert.equal(config.config.production.presenterSeconds, 12);
 
 const task = {
   id: "hq_test_1",
@@ -191,6 +195,8 @@ assert.equal(avatarStatus.avatar.selectedLookId, "look_style");
 const readyVideoConfig = await post("/video-config", { workspaceId });
 assert.equal(readyVideoConfig.ready, true);
 assert.equal(readyVideoConfig.avatarReady, true);
+const unusedPresenterConfig = await post("/video-config", { workspaceId, profileId: "guest" });
+assert.equal(unusedPresenterConfig.avatarReady, false);
 const videoUsage = await post("/video-usage", { workspaceId });
 assert.equal(videoUsage.billing.remaining, 30);
 assert.equal(videoUsage.sessions.length, 1);
@@ -208,6 +214,8 @@ assert.equal(voiceStatus.voice.status, "ready");
 
 task.contentMode = "statement";
 task.statement = "我認為命理應該提供可以執行的下一步。";
+task.presenter = { id: "default", name: "王小明" };
+task.production = { brandStyle: "品牌藍與暖金、清楚圖解", callToAction: "前往產品頁了解", totalSeconds: 50, presenterSeconds: 10 };
 task.assets = [uploadedAsset.asset];
 task.updatedAt = 3;
 await post("/hq-tasks", { action: "upsert", workspaceId, task });
@@ -222,6 +230,10 @@ assert.equal(videoAgentRequest.voice_id, "voice_test");
 assert.equal(videoAgentRequest.files[0].url, "https://files.heygen.ai/material.jpg");
 assert.match(videoAgentRequest.prompt, /創作者親自陳述/);
 assert.match(videoAgentRequest.prompt, /每 3～5 秒/);
+assert.match(videoAgentRequest.prompt, /王小明/);
+assert.match(videoAgentRequest.prompt, /品牌藍與暖金/);
+assert.match(videoAgentRequest.prompt, /人物出鏡總長約 10 秒/);
+assert.doesNotMatch(videoAgentRequest.prompt, /天衡深藍金/);
 const finishedVideo = await post("/video-status", {
   workspaceId,
   taskId: task.id,

@@ -452,6 +452,8 @@ async function hqConfig(env, b) {
     approvalMode: b.approvalMode === "auto" ? "auto" : "review",
     profile: hqSafeObject(b.profile),
     product: hqSafeObject(b.product, 8000),
+    presenter: hqSafeObject(b.presenter, 4000),
+    production: hqSafeObject(b.production, 4000),
     channels: channels.length ? channels : ["thread", "fb", "video"],
     updatedAt: Date.now(),
   };
@@ -556,9 +558,8 @@ async function videoConfig(env, b) {
     }
   }
   if (ownerReady && env.MONITOR) {
-    const id = hqWorkspaceId(b.workspaceId);
-    avatar = JSON.parse((await env.MONITOR.get("hq:avatar:" + id)) || "null");
-    voice = JSON.parse((await env.MONITOR.get("hq:voice:" + id)) || "null");
+    avatar = JSON.parse((await env.MONITOR.get(avatarKey(b.workspaceId, b.profileId))) || "null");
+    voice = JSON.parse((await env.MONITOR.get(voiceKey(b.workspaceId, b.profileId))) || "null");
   }
   const avatarReady = avatar?.status === "ready" && !!avatar?.selectedLookId;
   return {
@@ -619,8 +620,12 @@ async function requireVideoAccess(env, workspaceId) {
 function mediaAssetKey(workspaceId) {
   return "hq:assets:" + hqWorkspaceId(workspaceId);
 }
-function voiceKey(workspaceId) {
-  return "hq:voice:" + hqWorkspaceId(workspaceId);
+function creatorProfileId(value) {
+  return String(value || "default").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80) || "default";
+}
+function voiceKey(workspaceId, profileId = "default") {
+  const base = "hq:voice:" + hqWorkspaceId(workspaceId), id = creatorProfileId(profileId);
+  return id === "default" ? base : base + ":" + id;
 }
 function base64Bytes(value) {
   const raw = atob(String(value || "")), bytes = new Uint8Array(raw.length);
@@ -679,6 +684,7 @@ async function mediaAssets(env, b) {
       name: String(b.name || "素材").slice(0, 100),
       mediaType: String(uploaded.mime_type || b.mediaType || "").slice(0, 100),
       scope: b.scope === "persistent" ? "persistent" : "once",
+      productKey: String(b.productKey || "").replace(/[^A-Za-z0-9_\u4e00-\u9fff-]/g, "").slice(0, 80),
       createdAt: Date.now(),
     };
   if (!asset.id || !asset.url) throw Object.assign(new Error("HeyGen 沒有回傳素材資料"), { status: 502 });
@@ -689,20 +695,21 @@ async function mediaAssets(env, b) {
 async function voiceCreate(env, b) {
   await requireVideoAccess(env, b.workspaceId);
   if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
-  const asset = await heygenAssetWithUrl(env, await heygenUploadAsset(env, { data: b.audio, mediaType: b.mediaType, name: "sanbao-voice." + (String(b.mediaType).includes("webm") ? "webm" : "mp4") })),
+  const profileId = creatorProfileId(b.profileId), profileName = String(b.profileName || "目前人物").trim().slice(0, 60) || "目前人物",
+    asset = await heygenAssetWithUrl(env, await heygenUploadAsset(env, { data: b.audio, mediaType: b.mediaType, name: profileId + "-voice." + (String(b.mediaType).includes("webm") ? "webm" : "mp4") })),
     result = await heygen(env, "/v3/voices/clone", {
       method: "POST",
-      body: JSON.stringify({ audio: { type: "url", url: asset.url }, voice_name: "三寶爸專屬聲音", language: "zh", remove_background_noise: true }),
+      body: JSON.stringify({ audio: { type: "url", url: asset.url }, voice_name: profileName + "專屬聲音", language: "zh", remove_background_noise: true }),
     }),
-    voice = { id: String(result?.voice_clone_id || result?.voice_id || "").slice(0, 160), status: "processing", name: "三寶爸專屬聲音", createdAt: Date.now(), updatedAt: Date.now() };
+    voice = { id: String(result?.voice_clone_id || result?.voice_id || "").slice(0, 160), profileId, status: "processing", name: profileName + "專屬聲音", createdAt: Date.now(), updatedAt: Date.now() };
   if (!voice.id) throw Object.assign(new Error("HeyGen 沒有回傳聲音工作編號"), { status: 502 });
-  await env.MONITOR.put(voiceKey(b.workspaceId), JSON.stringify(voice));
+  await env.MONITOR.put(voiceKey(b.workspaceId, profileId), JSON.stringify(voice));
   return { ok: true, voice };
 }
 async function voiceStatus(env, b) {
   await requireVideoAccess(env, b.workspaceId);
   if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
-  const key = voiceKey(b.workspaceId), voice = JSON.parse((await env.MONITOR.get(key)) || "null");
+  const key = voiceKey(b.workspaceId, b.profileId), voice = JSON.parse((await env.MONITOR.get(key)) || "null");
   if (!voice?.id) return { voice: null };
   try {
     const result = await heygen(env, "/v3/voices/" + encodeURIComponent(voice.id)), status = String(result?.status || "").toLowerCase();
@@ -715,8 +722,9 @@ async function voiceStatus(env, b) {
   await env.MONITOR.put(key, JSON.stringify(voice));
   return { ok: true, voice };
 }
-function avatarKey(workspaceId) {
-  return "hq:avatar:" + hqWorkspaceId(workspaceId);
+function avatarKey(workspaceId, profileId = "default") {
+  const base = "hq:avatar:" + hqWorkspaceId(workspaceId), id = creatorProfileId(profileId);
+  return id === "default" ? base : base + ":" + id;
 }
 function avatarItem(result) {
   return result?.avatar_item || result?.avatar || result;
@@ -731,11 +739,13 @@ async function avatarCreate(env, b) {
     throw Object.assign(new Error("請使用 JPEG 或 PNG 正面照片"), { status: 400 });
   if (!image || image.length > 6_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image))
     throw Object.assign(new Error("照片缺少、格式錯誤或檔案過大"), { status: 413 });
-  const result = await heygen(env, "/v3/avatars", {
+  const profileId = creatorProfileId(b.profileId), profileName = String(b.profileName || "目前人物").trim().slice(0, 60) || "目前人物",
+    appearancePrompt = String(b.appearancePrompt || "Keep the same identity as the reference. Natural, professional and realistic proportions.").trim().slice(0, 1000),
+    result = await heygen(env, "/v3/avatars", {
       method: "POST",
       body: JSON.stringify({
         type: "photo",
-        name: "三寶爸專屬人物",
+        name: profileName + "專屬人物",
         file: { type: "base64", media_type: mediaType, data: image },
       }),
     }),
@@ -744,7 +754,9 @@ async function avatarCreate(env, b) {
   if (!lookId)
     throw Object.assign(new Error("HeyGen 沒有回傳人物編號"), { status: 502 });
   const avatar = {
-    name: "三寶爸專屬人物",
+    name: profileName + "專屬人物",
+    profileId,
+    appearancePrompt,
     status: "building_face",
     baseLookId: lookId,
     groupId: item?.group_id || null,
@@ -753,14 +765,14 @@ async function avatarCreate(env, b) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-  await env.MONITOR.put(avatarKey(b.workspaceId), JSON.stringify(avatar));
+  await env.MONITOR.put(avatarKey(b.workspaceId, profileId), JSON.stringify(avatar));
   return { ok: true, avatar };
 }
 async function avatarStatus(env, b) {
   await requireVideoAccess(env, b.workspaceId);
   if (!env.MONITOR)
     throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
-  const key = avatarKey(b.workspaceId),
+  const key = avatarKey(b.workspaceId, b.profileId),
     avatar = JSON.parse((await env.MONITOR.get(key)) || "null");
   if (!avatar?.baseLookId)
     throw Object.assign(new Error("尚未建立專屬人物"), { status: 404 });
@@ -779,10 +791,9 @@ async function avatarStatus(env, b) {
           method: "POST",
           body: JSON.stringify({
             type: "prompt",
-            name: "三寶爸－深藍西裝分析室",
+            name: avatar.name + "造型",
             avatar_id: avatar.baseLookId,
-            prompt:
-              "Taiwanese male presenter, same face and identity as the reference, natural realistic proportions, medium full-body framing, wearing a fitted charcoal navy blazer over a clean white crew-neck shirt and dark trousers, confident friendly posture, modern bright office with a city window, warm cinematic key light, premium editorial photography, realistic skin, hands visible and anatomically correct",
+            prompt: avatar.appearancePrompt || "Keep the same face and identity as the reference. Natural realistic proportions, professional presentation, flattering light, realistic skin and anatomically correct hands.",
           }),
         }),
         styled = avatarItem(styledResult),
@@ -845,23 +856,29 @@ function videoPrompt(task, channel) {
         : channel === "tiktok"
           ? "TikTok 直式短影片"
           : "Reels／Shorts 直式短影片",
-    duration = channel === "youtube" ? "約 90 秒" : "約 45 秒";
+    production = task.production || {},
+    durationSeconds = Math.max(15, Math.min(180, Number(production.totalSeconds) || (channel === "youtube" ? 90 : 45))),
+    presenterSeconds = Math.max(0, Math.min(durationSeconds, Number(production.presenterSeconds) || 12)),
+    presenterName = String(task.presenter?.name || "創作者").slice(0, 60),
+    brandStyle = String(production.brandStyle || "依產品定位建立一致、清楚且可信任的品牌視覺").slice(0, 500),
+    callToAction = String(production.callToAction || "提供一個自然且可執行的下一步").slice(0, 500);
   return [
-    `製作一支繁體中文、台灣口語的 ${label}，長度 ${duration}。`,
+    `製作一支繁體中文、台灣口語的 ${label}，長度約 ${durationSeconds} 秒。`,
     `主題：${String(task.goal || "").slice(0, 1000)}`,
     `產品：${String(task.product?.name || "目前主打產品").slice(0, 120)}`,
+    `出鏡人物：${presenterName}。人物出鏡總長約 ${presenterSeconds} 秒，只用於關鍵開場、觀點或收尾。`,
     task.contentMode === "statement" && task.statement
       ? `創作者親自陳述：${String(task.statement).slice(0, 4000)}\n必須保留這段陳述的核心立場與語氣，不可改成相反意思。`
       : "內容由 AI 自動構建，但要有明確觀點、真實情境與可執行下一步。",
     Array.isArray(task.assets) && task.assets.length
       ? `已附上 ${Math.min(task.assets.length, 20)} 個指定素材。優先把它們安排進與旁白直接相關的鏡頭；禁止只當無意義背景或忽略。`
       : "沒有指定素材時，才由系統依旁白選擇相關情境畫面。",
-    "品牌視覺：天衡深藍金，高級、可信任、台灣在地感；繁體中文字幕使用高對比白字與金色重點字，避開上下平台介面安全區。",
-    "這不是單一人物念稿。每 3～5 秒必須有一次有意義的鏡頭或構圖變化，人物出鏡約 40%、主題相關情境素材約 40%、文字圖解約 20%。",
+    `品牌視覺：${brandStyle}。繁體中文字幕必須高對比、固定在手機安全區內，不得逐字漂移或超出畫面。`,
+    "這不是單一人物念稿。每 3～5 秒必須有一次有意義的鏡頭或構圖變化；人物之外的時間，使用與當句旁白直接相關的產品素材、操作錄影、真實情境 B-roll、圖表與動態字卡。",
     "固定六段式：①0～3秒問題鉤子動態字卡；②人物出場提出問題；③與該句旁白直接相關的情境畫面；④時間軸、步驟、對照或概念圖解；⑤人物回到畫面給具體解讀；⑥最後3～5秒以留言或私訊行動收尾。",
-    "旁白提到等待要出現時鐘、日曆或未讀訊息；提到選擇要出現岔路或選項；提到工作要出現真實辦公情境；提到命理階段要出現抽象但精緻的命盤局部與時間軸。禁止無關素材、隨機漂浮方塊、長時間同一鏡位。",
+    "每個畫面必須直接服務當下旁白語意；優先示範產品、問題情境、使用步驟、前後對照或具體證據。禁止無關素材、隨機漂浮方塊、空白畫面與長時間同一鏡位。",
     "人物說話時使用中景或半身，情境段落可只保留旁白；加入柔和低音量背景音樂、少量轉場音效，不能蓋過人聲。",
-    "必須使用自然口吻、清楚字幕、前三秒有鉤子、畫面節奏明快；不得宣稱療效、保證獲利或成功。",
+    `行動引導：${callToAction}。必須使用自然口吻、清楚字幕、前三秒有鉤子、畫面節奏明快；不得宣稱療效、保證獲利或成功。`,
     "以下是已通過內容產線的腳本與分鏡，請忠實製作，不要杜撰價格、數據或見證：",
     String(task.outputs?.[channel] || task.outputs?.video || "").slice(0, 7500),
   ]
@@ -941,15 +958,17 @@ async function createVideoForRecord(env, record, channel) {
     ].includes(old.status)
   )
     return { ok: true, reused: true, job: old };
-  const avatar = JSON.parse(
-    (await env.MONITOR.get(avatarKey(record.id))) || "null",
+  const profileId = creatorProfileId(record.task.presenter?.id),
+    presenterName = String(record.task.presenter?.name || "目前人物").slice(0, 60),
+    avatar = JSON.parse(
+    (await env.MONITOR.get(avatarKey(record.id, profileId))) || "null",
   );
   const voice = JSON.parse(
-    (await env.MONITOR.get(voiceKey(record.id))) || "null",
+    (await env.MONITOR.get(voiceKey(record.id, profileId))) || "null",
   );
   if (avatar?.status !== "ready" || !avatar?.selectedLookId)
     throw Object.assign(
-      new Error("請先在營運總部完成『三寶爸專屬人物』設定，避免再產生陌生人物"),
+      new Error(`請先在營運總部完成「${presenterName}」的人物設定，避免產生陌生人物`),
       { status: 409 },
     );
   await videoRateLimit(env, record.id);
@@ -1198,6 +1217,8 @@ async function hqAutoTask(env, config, slot, today) {
     id: `auto_${today.replace(/-/g, "")}_${slot}`,
     goal,
     product: config.product || { name: productName },
+    presenter: config.presenter || { id: "default", name: "目前人物" },
+    production: config.production || {},
     channels: Object.keys(outputs),
     employees,
     autoSlot: slot,
