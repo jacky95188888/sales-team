@@ -16,6 +16,13 @@
   },
   "secrets": {
     "required": ["ANTHROPIC_KEY"],
-    "optional": ["HEYGEN_API_KEY"]
+    "optional": [
+      "HEYGEN_API_KEY",
+      "PUBLISH_TOKEN_KEY",
+      "YOUTUBE_CLIENT_ID",
+      "YOUTUBE_CLIENT_SECRET",
+      "TIKTOK_CLIENT_KEY",
+      "TIKTOK_CLIENT_SECRET"
+    ]
   }
 }

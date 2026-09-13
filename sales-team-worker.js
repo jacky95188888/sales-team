@@ -27,6 +27,13 @@ const ROUTES = new Set([
   "/voice-status",
   "/video-create",
   "/video-status",
+  "/publish-config",
+  "/oauth-start",
+  "/oauth-disconnect",
+  "/oauth/youtube/callback",
+  "/oauth/tiktok/callback",
+  "/publish-video",
+  "/publish-status",
 ]);
 const RULES = `使用繁體中文、台灣口語。食品保健不宣稱療效；不保證獲利或成功；命理標示僅供參考；價格與數據只能引用產品資料或搜尋來源。每項建議必須具體到做什麼、怎麼做、第一步。外部事實標【事實】，未查證推論標【推測】。`;
 const AGENTS = {
@@ -449,11 +456,13 @@ async function hqConfig(env, b) {
     workspaceId: id,
     autoEnabled: b.autoEnabled !== false,
     autoVideoEnabled: b.autoVideoEnabled === true,
+    autoPublishEnabled: b.autoPublishEnabled === true,
     approvalMode: b.approvalMode === "auto" ? "auto" : "review",
     profile: hqSafeObject(b.profile),
     product: hqSafeObject(b.product, 8000),
     presenter: hqSafeObject(b.presenter, 4000),
     production: hqSafeObject(b.production, 4000),
+    publishPrivacy: hqSafeObject(b.publishPrivacy, 1000),
     channels: channels.length ? channels : ["thread", "fb", "video"],
     updatedAt: Date.now(),
   };
@@ -1044,6 +1053,327 @@ async function videoStatus(req, env, b) {
   await saveVideoJob(env, record, channel, job);
   return { ok: true, job };
 }
+const PUBLISH_PROVIDERS = new Set(["youtube", "tiktok"]);
+function publishProvider(value) {
+  const provider = String(value || "").toLowerCase();
+  if (!PUBLISH_PROVIDERS.has(provider))
+    throw Object.assign(new Error("不支援的發布平台"), { status: 400 });
+  return provider;
+}
+function publisherKey(workspaceId, provider) {
+  return `hq:publisher:${hqWorkspaceId(workspaceId)}:${publishProvider(provider)}`;
+}
+function decodeB64url(value) {
+  const raw = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
+  const binary = atob(padded), out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+async function publisherCryptoKey(env) {
+  const secret = String(env.PUBLISH_TOKEN_KEY || env.ANTHROPIC_KEY || "");
+  if (!secret)
+    throw Object.assign(new Error("尚未設定發布憑證加密金鑰"), { status: 503 });
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode("sales-team-publisher-v1:" + secret),
+  );
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+async function sealPublisher(env, value) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await publisherCryptoKey(env),
+    new TextEncoder().encode(JSON.stringify(value)),
+  );
+  return { version: 1, iv: b64url(iv), data: b64url(new Uint8Array(encrypted)) };
+}
+async function openPublisher(env, sealed) {
+  if (!sealed?.iv || !sealed?.data) return null;
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: decodeB64url(sealed.iv) },
+    await publisherCryptoKey(env),
+    decodeB64url(sealed.data),
+  );
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+async function getPublisher(env, workspaceId, provider) {
+  if (!env.MONITOR) return null;
+  const saved = JSON.parse((await env.MONITOR.get(publisherKey(workspaceId, provider))) || "null");
+  if (!saved?.sealed) return null;
+  try {
+    return await openPublisher(env, saved.sealed);
+  } catch {
+    throw Object.assign(new Error("平台授權資料無法解密，請重新連線"), { status: 409 });
+  }
+}
+async function savePublisher(env, workspaceId, provider, token) {
+  await env.MONITOR.put(
+    publisherKey(workspaceId, provider),
+    JSON.stringify({ sealed: await sealPublisher(env, token), updatedAt: Date.now() }),
+  );
+}
+function publisherCredentialsReady(env, provider) {
+  return provider === "youtube"
+    ? !!(env.YOUTUBE_CLIENT_ID && env.YOUTUBE_CLIENT_SECRET)
+    : !!(env.TIKTOK_CLIENT_KEY && env.TIKTOK_CLIENT_SECRET);
+}
+function oauthRedirect(req, provider) {
+  return new URL(`/oauth/${provider}/callback`, new URL(req.url).origin).toString();
+}
+function formBody(values) {
+  const out = new URLSearchParams();
+  for (const [key, value] of Object.entries(values))
+    if (value != null && value !== "") out.set(key, String(value));
+  return out.toString();
+}
+async function responseJson(response, label) {
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { error: text.slice(0, 500) }; }
+  if (!response.ok || data?.error?.code && data.error.code !== "ok") {
+    const message = data?.error_description || data?.error?.message || data?.error?.code || data?.error || data?.message || `${label} ${response.status}`;
+    throw Object.assign(new Error(String(message).slice(0, 500)), { status: response.status >= 500 ? 502 : 400 });
+  }
+  return data;
+}
+async function oauthStart(req, env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const provider = publishProvider(b.provider);
+  if (!publisherCredentialsReady(env, provider))
+    throw Object.assign(new Error(provider === "youtube" ? "尚未設定 YouTube OAuth 憑證" : "尚未設定 TikTok 開發者憑證"), { status: 409 });
+  const state = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  await env.MONITOR.put(
+    `hq:oauth-state:${state}`,
+    JSON.stringify({ workspaceId: hqWorkspaceId(b.workspaceId), provider, createdAt: Date.now() }),
+    { expirationTtl: 600 },
+  );
+  const redirectUri = oauthRedirect(req, provider);
+  let authUrl;
+  if (provider === "youtube") {
+    const params = new URLSearchParams({
+      client_id: env.YOUTUBE_CLIENT_ID,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "https://www.googleapis.com/auth/youtube.upload",
+      access_type: "offline",
+      include_granted_scopes: "true",
+      prompt: "consent select_account",
+      state,
+    });
+    authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
+  } else {
+    const params = new URLSearchParams({
+      client_key: env.TIKTOK_CLIENT_KEY,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "user.info.basic,video.publish",
+      state,
+    });
+    authUrl = "https://www.tiktok.com/v2/auth/authorize/?" + params;
+  }
+  return { ok: true, provider, authUrl, redirectUri };
+}
+function oauthResultPage(provider, ok, message) {
+  const label = provider === "youtube" ? "YouTube" : "TikTok";
+  const target = `${ORIGIN}/sales-team/?oauth=${encodeURIComponent(provider)}&result=${ok ? "connected" : "failed"}`;
+  const safeMessage = String(message || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="refresh" content="2;url=${target}"><title>${label} 授權</title><style>body{margin:0;background:#140b2d;color:#fff;font-family:system-ui;display:grid;place-items:center;min-height:100vh}.box{max-width:560px;margin:24px;padding:32px;border:1px solid #cda84a;border-radius:24px;background:#241742;text-align:center}a{color:#ffe291}</style></head><body><div class="box"><h1>${ok ? "✅" : "⚠️"} ${label} ${ok ? "連線完成" : "連線失敗"}</h1><p>${safeMessage}</p><p>即將返回顧問團。</p><a href="${target}">立即返回</a></div></body></html>`, {
+    status: ok ? 200 : 400,
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" },
+  });
+}
+async function oauthCallback(req, env, provider) {
+  const url = new URL(req.url), state = String(url.searchParams.get("state") || "");
+  const stateKey = `hq:oauth-state:${state}`;
+  const saved = state ? JSON.parse((await env.MONITOR.get(stateKey)) || "null") : null;
+  if (!saved || saved.provider !== provider)
+    return oauthResultPage(provider, false, "授權驗證已過期，請回到顧問團重新連線。");
+  await env.MONITOR.delete(stateKey);
+  if (url.searchParams.get("error"))
+    return oauthResultPage(provider, false, url.searchParams.get("error_description") || url.searchParams.get("error"));
+  const code = String(url.searchParams.get("code") || "");
+  if (!code) return oauthResultPage(provider, false, "平台沒有回傳授權碼。");
+  try {
+    const redirectUri = oauthRedirect(req, provider);
+    let token;
+    if (provider === "youtube") {
+      token = await responseJson(await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody({ code, client_id: env.YOUTUBE_CLIENT_ID, client_secret: env.YOUTUBE_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+      }), "YouTube OAuth");
+    } else {
+      token = await responseJson(await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody({ code, client_key: env.TIKTOK_CLIENT_KEY, client_secret: env.TIKTOK_CLIENT_SECRET, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+      }), "TikTok OAuth");
+    }
+    token.provider = provider;
+    token.created_at = Date.now();
+    token.expires_at = Date.now() + Math.max(60, Number(token.expires_in || 3600)) * 1000;
+    await savePublisher(env, saved.workspaceId, provider, token);
+    return oauthResultPage(provider, true, "帳號已安全連接；目前沒有發布任何影片。");
+  } catch (error) {
+    return oauthResultPage(provider, false, error?.message || error);
+  }
+}
+async function refreshPublisher(env, workspaceId, provider, token) {
+  if (!token?.refresh_token || Number(token.expires_at || 0) > Date.now() + 120000) return token;
+  let fresh;
+  if (provider === "youtube") {
+    fresh = await responseJson(await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formBody({ client_id: env.YOUTUBE_CLIENT_ID, client_secret: env.YOUTUBE_CLIENT_SECRET, refresh_token: token.refresh_token, grant_type: "refresh_token" }),
+    }), "YouTube refresh");
+  } else {
+    fresh = await responseJson(await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formBody({ client_key: env.TIKTOK_CLIENT_KEY, client_secret: env.TIKTOK_CLIENT_SECRET, refresh_token: token.refresh_token, grant_type: "refresh_token" }),
+    }), "TikTok refresh");
+  }
+  const next = { ...token, ...fresh, refresh_token: fresh.refresh_token || token.refresh_token, provider, expires_at: Date.now() + Math.max(60, Number(fresh.expires_in || 3600)) * 1000 };
+  await savePublisher(env, workspaceId, provider, next);
+  return next;
+}
+async function creatorInfo(env, workspaceId, provider, token) {
+  token = await refreshPublisher(env, workspaceId, provider, token);
+  if (provider === "youtube") {
+    const data = await responseJson(await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: { Authorization: `Bearer ${token.access_token}` } }), "YouTube channel");
+    const channel = data.items?.[0];
+    return { token, account: channel ? { id: channel.id, name: channel.snippet?.title || "YouTube 頻道", avatarUrl: channel.snippet?.thumbnails?.default?.url || null } : null, privacyOptions: ["private", "unlisted", "public"] };
+  }
+  const data = await responseJson(await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/", { method: "POST", headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json; charset=UTF-8" }, body: "{}" }), "TikTok creator");
+  return { token, account: data.data ? { id: token.open_id || null, name: data.data.creator_nickname || data.data.creator_username || "TikTok 帳號", username: data.data.creator_username || null, avatarUrl: data.data.creator_avatar_url || null, maxDuration: data.data.max_video_post_duration_sec || null } : null, privacyOptions: data.data?.privacy_level_options || [] };
+}
+async function publishConfig(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const result = {};
+  for (const provider of ["youtube", "tiktok"]) {
+    const token = await getPublisher(env, b.workspaceId, provider);
+    const item = { credentialsReady: publisherCredentialsReady(env, provider), connected: !!token, account: null, privacyOptions: provider === "youtube" ? ["private", "unlisted", "public"] : [], error: null };
+    if (token && b.refresh === true) {
+      try {
+        const info = await creatorInfo(env, b.workspaceId, provider, token);
+        item.account = info.account;
+        item.privacyOptions = info.privacyOptions;
+      } catch (error) { item.error = String(error?.message || error).slice(0, 300); }
+    }
+    result[provider] = item;
+  }
+  return { ok: true, platforms: result };
+}
+async function oauthDisconnect(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const provider = publishProvider(b.provider), token = await getPublisher(env, b.workspaceId, provider);
+  if (token?.access_token) {
+    try {
+      if (provider === "youtube")
+        await fetch("https://oauth2.googleapis.com/revoke?token=" + encodeURIComponent(token.access_token), { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      else
+        await fetch("https://open.tiktokapis.com/v2/oauth/revoke/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formBody({ client_key: env.TIKTOK_CLIENT_KEY, client_secret: env.TIKTOK_CLIENT_SECRET, token: token.access_token }) });
+    } catch {}
+  }
+  await env.MONITOR.delete(publisherKey(b.workspaceId, provider));
+  return { ok: true, provider, connected: false };
+}
+async function remoteVideo(videoUrl) {
+  const url = safeUrl(videoUrl), response = await fetch(url);
+  if (!response.ok || !response.body)
+    throw Object.assign(new Error("無法讀取待發布影片"), { status: 502 });
+  const length = Number(response.headers.get("content-length") || 0);
+  if (!length) throw Object.assign(new Error("影片來源沒有提供檔案大小"), { status: 409 });
+  return { response, length, contentType: response.headers.get("content-type") || "video/mp4" };
+}
+async function youtubePublish(env, workspaceId, token, videoUrl, metadata) {
+  token = await refreshPublisher(env, workspaceId, "youtube", token);
+  const video = await remoteVideo(videoUrl);
+  const init = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Length": String(video.length), "X-Upload-Content-Type": video.contentType },
+    body: JSON.stringify({ snippet: { title: metadata.title, description: metadata.description, categoryId: "22" }, status: { privacyStatus: metadata.privacy } }),
+  });
+  if (!init.ok) await responseJson(init, "YouTube upload init");
+  const location = init.headers.get("location");
+  if (!location) throw Object.assign(new Error("YouTube 沒有回傳上傳位置"), { status: 502 });
+  const uploaded = await responseJson(await fetch(location, { method: "PUT", headers: { "Content-Type": video.contentType, "Content-Length": String(video.length) }, body: video.response.body }), "YouTube upload");
+  return { provider: "youtube", status: "published", videoId: uploaded.id, url: uploaded.id ? `https://youtu.be/${uploaded.id}` : null, privacy: metadata.privacy, publishedAt: Date.now() };
+}
+async function tiktokPublish(env, workspaceId, token, videoUrl, metadata) {
+  token = await refreshPublisher(env, workspaceId, "tiktok", token);
+  const info = await creatorInfo(env, workspaceId, "tiktok", token);
+  if (!info.privacyOptions.includes(metadata.privacy))
+    throw Object.assign(new Error("請重新選擇 TikTok 目前允許的可見度"), { status: 409 });
+  const video = await remoteVideo(videoUrl);
+  if (video.length > 64 * 1024 * 1024)
+    throw Object.assign(new Error("TikTok 自動上傳目前限制影片小於 64MB"), { status: 413 });
+  const init = await responseJson(await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${info.token.access_token}`, "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify({ post_info: { title: metadata.description.slice(0, 2200), privacy_level: metadata.privacy, disable_comment: false, disable_duet: false, disable_stitch: false, video_cover_timestamp_ms: 1000 }, source_info: { source: "FILE_UPLOAD", video_size: video.length, chunk_size: video.length, total_chunk_count: 1 } }),
+  }), "TikTok upload init");
+  const uploadUrl = init.data?.upload_url, publishId = init.data?.publish_id;
+  if (!uploadUrl || !publishId) throw Object.assign(new Error("TikTok 沒有回傳上傳位置"), { status: 502 });
+  const upload = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": video.contentType, "Content-Length": String(video.length), "Content-Range": `bytes 0-${video.length - 1}/${video.length}` }, body: video.response.body });
+  if (!upload.ok) await responseJson(upload, "TikTok upload");
+  return { provider: "tiktok", status: "processing", publishId, privacy: metadata.privacy, publishedAt: Date.now() };
+}
+async function savePublishJob(env, record, provider, job) {
+  const task = record.tasks[record.index];
+  task.publishJobs = { ...(task.publishJobs || {}), [provider]: job };
+  task.updatedAt = Date.now();
+  record.tasks[record.index] = task;
+  await env.MONITOR.put(record.key, JSON.stringify(record.tasks.slice(0, 80)));
+  return task;
+}
+async function publishVideo(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const provider = publishProvider(b.provider), channel = provider === "youtube" ? "youtube" : "tiktok";
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId), task = record.task;
+  if (!task.finalApprovedAt && task.approvalMode !== "auto")
+    throw Object.assign(new Error("請先播放並批准影片成品"), { status: 409 });
+  const videoJob = task.videoJobs?.[channel];
+  if (videoJob?.status !== "completed" || !videoJob.videoUrl)
+    throw Object.assign(new Error("這個平台的 MP4 尚未完成"), { status: 409 });
+  let token = await getPublisher(env, record.id, provider);
+  if (!token) throw Object.assign(new Error(`請先連接 ${provider === "youtube" ? "YouTube" : "TikTok"} 帳號`), { status: 409 });
+  const privacy = String(b.privacy || (provider === "youtube" ? "private" : ""));
+  if (provider === "youtube" && !["private", "unlisted", "public"].includes(privacy))
+    throw Object.assign(new Error("YouTube 可見度不正確"), { status: 400 });
+  if (provider === "tiktok" && !privacy)
+    throw Object.assign(new Error("請先選擇 TikTok 可見度"), { status: 400 });
+  const metadata = { title: String(task.goal || "顧問團影片").slice(0, 100), description: String(task.outputs?.[channel] || task.goal || "").slice(0, provider === "youtube" ? 5000 : 2200), privacy };
+  const pending = { provider, status: "uploading", privacy, startedAt: Date.now() };
+  await savePublishJob(env, record, provider, pending);
+  try {
+    const job = provider === "youtube"
+      ? await youtubePublish(env, record.id, token, videoJob.captionedVideoUrl || videoJob.videoUrl, metadata)
+      : await tiktokPublish(env, record.id, token, videoJob.captionedVideoUrl || videoJob.videoUrl, metadata);
+    await savePublishJob(env, record, provider, job);
+    return { ok: true, job };
+  } catch (error) {
+    const job = { ...pending, status: "failed", failure: String(error?.message || error).slice(0, 500), updatedAt: Date.now() };
+    await savePublishJob(env, record, provider, job);
+    throw error;
+  }
+}
+async function publishStatus(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const provider = publishProvider(b.provider), record = await hqTaskForVideo(env, b.workspaceId, b.taskId), old = record.task.publishJobs?.[provider];
+  if (!old) throw Object.assign(new Error("尚未開始發布"), { status: 404 });
+  if (provider === "youtube" || !old.publishId || ["published", "failed"].includes(old.status)) return { ok: true, job: old };
+  let token = await getPublisher(env, record.id, provider);
+  if (!token) throw Object.assign(new Error("TikTok 授權已中斷"), { status: 409 });
+  token = await refreshPublisher(env, record.id, provider, token);
+  const data = await responseJson(await fetch("https://open.tiktokapis.com/v2/post/publish/status/fetch/", { method: "POST", headers: { Authorization: `Bearer ${token.access_token}`, "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify({ publish_id: old.publishId }) }), "TikTok status");
+  const platformStatus = String(data.data?.status || "PROCESSING_UPLOAD"), job = { ...old, platformStatus, status: platformStatus === "PUBLISH_COMPLETE" ? "published" : platformStatus === "FAILED" ? "failed" : "processing", failure: data.data?.fail_reason || old.failure || null, updatedAt: Date.now() };
+  await savePublishJob(env, record, provider, job);
+  return { ok: true, job };
+}
 function b64url(bytes) {
   let s = "";
   for (const n of bytes) s += String.fromCharCode(n);
@@ -1287,14 +1617,53 @@ async function hqScheduled(env, event) {
     }
   }
 }
+async function hqProcessAutoPublish(env) {
+  if (!env.MONITOR) return;
+  const workspaceIds = JSON.parse((await env.MONITOR.get("hq:workspaces")) || "[]").slice(-20);
+  for (const workspaceId of workspaceIds) {
+    const config = JSON.parse((await env.MONITOR.get("hq:config:" + workspaceId)) || "null");
+    if (config?.approvalMode !== "auto" || config?.autoPublishEnabled !== true) continue;
+    const tasks = JSON.parse((await env.MONITOR.get("hq:tasks:" + workspaceId)) || "[]").slice(0, 12);
+    for (const task of tasks) {
+      if (!task || task.approvalMode !== "auto") continue;
+      for (const provider of ["youtube", "tiktok"]) {
+        if (!task.channels?.includes(provider)) continue;
+        const existingPublish = task.publishJobs?.[provider];
+        try {
+          if (existingPublish?.status === "processing") {
+            await publishStatus(env, { workspaceId, taskId: task.id, provider });
+            continue;
+          }
+          if (existingPublish && existingPublish.status !== "failed") continue;
+          let currentVideo = task.videoJobs?.[provider];
+          if (currentVideo?.sessionId && ["thinking", "generating", "pending", "processing"].includes(currentVideo.status)) {
+            const checked = await videoStatus(null, env, { workspaceId, taskId: task.id, channel: provider });
+            currentVideo = checked.job;
+          }
+          if (currentVideo?.status !== "completed" || !currentVideo.videoUrl) continue;
+          const privacy = String(config.publishPrivacy?.[provider] || (provider === "youtube" ? "private" : ""));
+          if (provider === "tiktok" && !privacy) continue;
+          await publishVideo(env, { workspaceId, taskId: task.id, provider, privacy });
+        } catch (error) {
+          await env.MONITOR.put(
+            `hq:auto-publish-error:${workspaceId}:${task.id}:${provider}`,
+            JSON.stringify({ at: Date.now(), error: String(error?.message || error).slice(0, 500) }),
+            { expirationTtl: 604800 },
+          );
+        }
+      }
+    }
+  }
+}
 export default {
   async scheduled(e, env, ctx) {
-    ctx.waitUntil(
-      Promise.all([
+    ctx.waitUntil((async () => {
+      await Promise.all([
         e?.cron === "0 1 * * *" ? monitorScheduled(env) : Promise.resolve(),
         hqScheduled(env, e),
-      ]),
-    );
+      ]);
+      await hqProcessAutoPublish(env);
+    })());
   },
   async fetch(req, env) {
     const H = cors(req),
@@ -1315,6 +1684,10 @@ export default {
           200,
           H,
         );
+      if (url.pathname === "/oauth/youtube/callback" && req.method === "GET")
+        return oauthCallback(req, env, "youtube");
+      if (url.pathname === "/oauth/tiktok/callback" && req.method === "GET")
+        return oauthCallback(req, env, "tiktok");
       if (req.method !== "POST") return json({ error: "POST_ONLY" }, 405, H);
       if (Number(req.headers.get("content-length") || 0) > 7_000_000)
         return json({ error: "REQUEST_TOO_LARGE" }, 413, H);
@@ -1354,6 +1727,16 @@ export default {
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
         return json(await videoStatus(req, env, b), 200, H);
+      if (url.pathname === "/publish-config")
+        return json(await publishConfig(env, b), 200, H);
+      if (url.pathname === "/oauth-start")
+        return json(await oauthStart(req, env, b), 200, H);
+      if (url.pathname === "/oauth-disconnect")
+        return json(await oauthDisconnect(env, b), 200, H);
+      if (url.pathname === "/publish-video")
+        return json(await publishVideo(env, b), 200, H);
+      if (url.pathname === "/publish-status")
+        return json(await publishStatus(env, b), 200, H);
       if (url.pathname === "/vision-stats") {
         const t = await vision(
           env,

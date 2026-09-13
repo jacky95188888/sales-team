@@ -9,6 +9,7 @@ class MemoryKV {
   constructor() { this.data = new Map(); }
   async get(key) { return this.data.has(key) ? this.data.get(key) : null; }
   async put(key, value) { this.data.set(key, String(value)); }
+  async delete(key) { this.data.delete(key); }
 }
 
 const env = { MONITOR: new MemoryKV() };
@@ -40,6 +41,7 @@ await post("/hq-config", {
   action: "save",
   workspaceId,
   autoEnabled: true,
+  autoPublishEnabled: false,
   approvalMode: "review",
   profile: { p_name: "天衡" },
   product: { name: "天衡" },
@@ -50,6 +52,7 @@ await post("/hq-config", {
 const config = await post("/hq-config", { action: "list", workspaceId });
 assert.equal(config.config.autoEnabled, true);
 assert.equal(config.config.approvalMode, "review");
+assert.equal(config.config.autoPublishEnabled, false);
 assert.deepEqual(config.config.channels, ["thread", "fb"]);
 assert.equal(config.config.presenter.id, "default");
 assert.equal(config.config.production.presenterSeconds, 12);
@@ -195,6 +198,10 @@ assert.equal(avatarStatus.avatar.selectedLookId, "look_style");
 const readyVideoConfig = await post("/video-config", { workspaceId });
 assert.equal(readyVideoConfig.ready, true);
 assert.equal(readyVideoConfig.avatarReady, true);
+const publishConfig = await post("/publish-config", { workspaceId });
+assert.equal(publishConfig.platforms.youtube.credentialsReady, false);
+assert.equal(publishConfig.platforms.youtube.connected, false);
+assert.equal(publishConfig.platforms.tiktok.connected, false);
 const unusedPresenterConfig = await post("/video-config", { workspaceId, profileId: "guest" });
 assert.equal(unusedPresenterConfig.avatarReady, false);
 const videoUsage = await post("/video-usage", { workspaceId });

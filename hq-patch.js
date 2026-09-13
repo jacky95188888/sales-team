@@ -16,6 +16,10 @@
   var currentRunId = null;
   var cloudBusy = false;
   var videoConfigState = { ready: false, apiReady: false, apiValid: false, ownerReady: false, creditReady: true, billing: null, avatarReady: false, avatar: null, voiceReady: false, voice: null };
+  var publishConfigState = {
+    youtube: { credentialsReady: false, connected: false, account: null, privacyOptions: ["private", "unlisted", "public"] },
+    tiktok: { credentialsReady: false, connected: false, account: null, privacyOptions: [] }
+  };
   var videoPollers = {};
   var avatarPoller = null;
   var voicePoller = null;
@@ -193,6 +197,11 @@
       presenter: activePresenter(),
       production: currentProductionProfile(),
       autoVideoEnabled: approvalMode() === "auto" && !!(document.getElementById("hqAutoPaidVideo") && document.getElementById("hqAutoPaidVideo").checked),
+      autoPublishEnabled: approvalMode() === "auto" && !!(document.getElementById("hqAutoPublish") && document.getElementById("hqAutoPublish").checked),
+      publishPrivacy: {
+        youtube: String(document.getElementById("hqYoutubePrivacy") && document.getElementById("hqYoutubePrivacy").value || "private"),
+        tiktok: String(document.getElementById("hqTiktokPrivacy") && document.getElementById("hqTiktokPrivacy").value || "")
+      },
       channels: Array.isArray(selectedChannels) && selectedChannels.length ? selectedChannels : ["thread", "fb", "video"]
     }).then(function () {
       cloudState("☁️ 雲端同步完成・每日自動營運已開啟");
@@ -227,6 +236,84 @@
     var data = await response.json();
     if (data.error) throw new Error(data.error);
     return data;
+  }
+  function publisherLabel(provider) { return provider === "youtube" ? "YouTube" : "TikTok"; }
+  function publisherStateText(provider) {
+    var item = publishConfigState[provider] || {};
+    if (!item.credentialsReady) return "尚未加入平台開發者憑證";
+    if (!item.connected) return "尚未授權帳號";
+    if (item.error) return "授權需要更新：" + item.error;
+    return "✅ 已連接" + (item.account && item.account.name ? "「" + item.account.name + "」" : "帳號");
+  }
+  function renderPublisherState() {
+    ["youtube", "tiktok"].forEach(function (provider) {
+      var item = publishConfigState[provider] || {}, state = document.getElementById("hq" + (provider === "youtube" ? "Youtube" : "Tiktok") + "State");
+      var button = document.getElementById("hq" + (provider === "youtube" ? "Youtube" : "Tiktok") + "Connect");
+      if (state) state.textContent = publisherStateText(provider);
+      if (button) {
+        button.textContent = item.connected ? "解除連線" : "連接 " + publisherLabel(provider);
+        button.dataset.connected = item.connected ? "1" : "0";
+        button.disabled = !item.credentialsReady;
+      }
+    });
+    var select = document.getElementById("hqTiktokPrivacy"), options = publishConfigState.tiktok && publishConfigState.tiktok.privacyOptions || [];
+    if (select) {
+      var current = select.value;
+      select.innerHTML = '<option value="">發布前選擇可見度</option>' + options.map(function (value) {
+        var labels = { PUBLIC_TO_EVERYONE: "所有人可見", MUTUAL_FOLLOW_FRIENDS: "互相關注好友", FOLLOWER_OF_CREATOR: "粉絲可見", SELF_ONLY: "僅自己可見" };
+        return '<option value="' + E(value) + '"' + (value === current ? ' selected' : '') + '>' + E(labels[value] || value) + '</option>';
+      }).join("");
+      select.disabled = !publishConfigState.tiktok.connected || !options.length;
+    }
+  }
+  function checkPublishConfig(refresh) {
+    return videoAPI("/publish-config", { workspaceId: workspaceId(), refresh: refresh === true }).then(function (data) {
+      publishConfigState = data.platforms || publishConfigState;
+      renderPublisherState(); render();
+    }).catch(function () {});
+  }
+  async function connectPublisher(provider) {
+    var item = publishConfigState[provider] || {};
+    if (item.connected) {
+      if (!confirm("確定解除 " + publisherLabel(provider) + " 發布授權？之後將無法自動發布，直到重新連接。")) return;
+      try {
+        await videoAPI("/oauth-disconnect", { workspaceId: workspaceId(), provider: provider });
+        await checkPublishConfig(false);
+      } catch (err) { alert(String(err && err.message ? err.message : err)); }
+      return;
+    }
+    try {
+      var data = await videoAPI("/oauth-start", { workspaceId: workspaceId(), provider: provider });
+      window.location.assign(data.authUrl);
+    } catch (err) { alert(String(err && err.message ? err.message : err)); }
+  }
+  function mergePublishJob(taskId, provider, job) {
+    var task = findTask(taskId); if (!task) return;
+    var jobs = Object.assign({}, task.publishJobs || {}); jobs[provider] = job;
+    updateTask(taskId, { publishJobs: jobs }); render();
+  }
+  async function publishTaskVideo(taskId, provider) {
+    var task = findTask(taskId); if (!task) return;
+    var privacy = provider === "youtube"
+      ? String(document.getElementById("hqYoutubePrivacy") && document.getElementById("hqYoutubePrivacy").value || "private")
+      : String(document.getElementById("hqTiktokPrivacy") && document.getElementById("hqTiktokPrivacy").value || "");
+    if (provider === "tiktok" && !privacy) { alert("請先在發布連線區選擇 TikTok 可見度。"); return; }
+    var visibility = { private: "私人", unlisted: "不公開列出", public: "公開", SELF_ONLY: "僅自己可見", MUTUAL_FOLLOW_FRIENDS: "互相關注好友", PUBLIC_TO_EVERYONE: "所有人可見" }[privacy] || privacy;
+    if (!confirm("確定把這支影片發布到 " + publisherLabel(provider) + "？\n可見度：" + visibility)) return;
+    mergePublishJob(taskId, provider, { provider: provider, status: "uploading", privacy: privacy, startedAt: Date.now() });
+    try {
+      var data = await videoAPI("/publish-video", { workspaceId: workspaceId(), taskId: taskId, provider: provider, privacy: privacy });
+      mergePublishJob(taskId, provider, data.job);
+    } catch (err) {
+      mergePublishJob(taskId, provider, { provider: provider, status: "failed", privacy: privacy, failure: String(err && err.message ? err.message : err), updatedAt: Date.now() });
+      alert(String(err && err.message ? err.message : err));
+    }
+  }
+  async function pollPublish(taskId, provider) {
+    try {
+      var data = await videoAPI("/publish-status", { workspaceId: workspaceId(), taskId: taskId, provider: provider });
+      mergePublishJob(taskId, provider, data.job);
+    } catch (err) { alert(String(err && err.message ? err.message : err)); }
   }
   function videoStateText() {
     var billing = videoConfigState.billing;
@@ -385,6 +472,7 @@
       .hq-output{margin-top:9px;border-top:1px solid rgba(255,255,255,.1);padding-top:9px}.hq-output summary{color:var(--gold-lt);font-size:.78rem;cursor:pointer}.hq-output pre{white-space:pre-wrap;font-family:inherit;font-size:.78rem;color:var(--ink);margin-top:7px;max-height:280px;overflow:auto}.hq-output .copy{margin-top:7px}
       .hq-videoengine{margin-top:8px;padding:8px 9px;border-radius:9px;border:1px solid rgba(255,202,95,.3);background:rgba(255,202,95,.07);font-size:.7rem;color:#f2d996}.hq-videoengine b{color:var(--gold-lt)}
       .hq-videobox{margin-top:8px;padding:9px;border-radius:10px;background:rgba(8,7,18,.42);border:1px solid rgba(145,215,180,.22)}.hq-videobox video{display:block;width:100%;max-height:360px;border-radius:9px;background:#000;margin-top:8px}.hq-videobox a{display:inline-block;margin-top:8px;color:var(--gold-lt)}.hq-videostatus{font-size:.72rem;color:#91d7b4}.hq-mini[href]{text-decoration:none;display:inline-flex;align-items:center}
+      .hq-publish{margin-top:10px;padding:11px;border:1px solid rgba(97,190,255,.32);border-radius:12px;background:linear-gradient(135deg,rgba(15,34,65,.76),rgba(39,22,67,.72))}.hq-publish>strong{display:block;color:var(--gold-lt);font-size:.8rem;margin-bottom:8px}.hq-publishrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}.hq-publishrow:first-of-type{border-top:0}.hq-publishname{font-size:.74rem;color:var(--ink);font-weight:750}.hq-publishstate{display:block;margin-top:2px;font-size:.64rem;color:var(--ink-soft);overflow-wrap:anywhere}.hq-publishselects{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.hq-publishselects label{font-size:.62rem;color:var(--ink-soft)}.hq-publishselects select{display:block;width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid rgba(169,139,216,.3);background:#160f2b;color:var(--ink);font-size:.68rem}.hq-publishnote{margin-top:7px;font-size:.63rem;line-height:1.45;color:var(--ink-soft)}.hq-publishjob{margin-top:7px;padding:8px;border-radius:8px;background:rgba(8,7,18,.4);font-size:.68rem;color:#91d7b4}.hq-publishjob.failed{color:#ffaaa4}
       .hq-mode{display:block!important;width:100%!important;min-width:0!important;margin-top:10px;padding:10px;border:1px solid rgba(169,139,216,.28);border-radius:11px;background:rgba(20,13,38,.48);overflow:hidden}.hq-mode b{display:block;color:var(--gold-lt);font-size:.78rem;margin-bottom:7px}.hq-mode label{display:grid!important;grid-template-columns:22px minmax(0,1fr)!important;align-items:flex-start!important;gap:9px!important;width:100%!important;min-width:0!important;min-height:0!important;padding:9px 4px!important;color:var(--ink);font-size:.75rem;line-height:1.45;writing-mode:horizontal-tb!important;white-space:normal!important}.hq-mode input[type=radio]{display:block!important;width:20px!important;height:20px!important;min-width:20px!important;margin:2px 0 0!important;accent-color:var(--gold-dk)}.hq-mode label span,.hq-mode small{display:block!important;width:auto!important;min-width:0!important;writing-mode:horizontal-tb!important;white-space:normal!important;word-break:break-word!important;overflow-wrap:anywhere!important}.hq-mode small{color:var(--ink-soft);font-size:.67rem;margin-top:2px}
       .hq-avatar{margin-top:10px;padding:11px;border:1px solid rgba(232,194,103,.34);border-radius:12px;background:linear-gradient(135deg,rgba(17,29,53,.76),rgba(42,25,68,.72))}.hq-avatarhead{display:flex;gap:10px;align-items:center}.hq-avatarhead img{width:58px;height:72px;object-fit:cover;border-radius:10px;border:1px solid rgba(232,194,103,.55)}.hq-avatarhead b{display:block;color:var(--gold-lt);font-size:.8rem}.hq-avatarhead span{display:block;color:var(--ink-soft);font-size:.7rem;line-height:1.45;margin-top:3px}.hq-avatarcontrols{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px}.hq-avatarcontrols input{font-size:.68rem;color:var(--ink-soft);max-width:100%}.hq-avatarcontrols button{margin:0}.hq-avatarprivacy{font-size:.64rem;color:var(--ink-soft);margin-top:7px}
       .hq-compose{margin-top:10px;padding:11px;border:1px solid rgba(169,139,216,.3);border-radius:12px;background:rgba(20,13,38,.42)}.hq-compose>strong{display:block;color:var(--gold-lt);font-size:.8rem;margin-bottom:7px}.hq-choice{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;padding:7px 0;font-size:.74rem;color:var(--ink)}.hq-choice input{width:19px!important;height:19px!important;min-width:19px!important;margin:1px 0 0!important;accent-color:var(--gold-dk)}.hq-choice small{display:block;color:var(--ink-soft);font-size:.64rem;margin-top:2px}.hq-statement{min-height:92px;margin-top:7px}.hq-subtools{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.hq-subtools button{margin:0}.hq-materials{margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1)}.hq-materials>summary{cursor:pointer;color:var(--gold-lt);font-size:.74rem;font-weight:800}.hq-materials[open]>summary{margin-bottom:8px}.hq-materials input[type=file]{font-size:.68rem;margin-top:7px}.hq-assets{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.hq-assetchip{display:grid;grid-template-columns:17px minmax(0,1fr);gap:5px;align-items:center;max-width:100%;padding:6px 8px;border:1px solid rgba(169,139,216,.28);border-radius:8px;font-size:.65rem;color:var(--ink-soft)}.hq-assetchip input{width:16px!important;height:16px!important;margin:0!important}.hq-voiceplayer{width:100%;height:36px;margin-top:7px}.hq-recording{color:#ffaaa4!important;border-color:#e66!important}.hq-scope{display:flex;gap:12px;flex-wrap:wrap;margin-top:7px}.hq-scope label{display:flex;align-items:center;gap:5px;font-size:.67rem;color:var(--ink-soft)}.hq-scope input{width:17px!important;height:17px!important;margin:0!important}
@@ -397,6 +485,7 @@
       .hq-config{margin:0 0 12px;padding:11px;border:1px solid rgba(232,194,103,.3);border-radius:12px;background:rgba(20,13,38,.42)}.hq-config h3{color:var(--gold-lt);font-size:.82rem;margin:0 0 9px}.hq-configgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hq-field{min-width:0}.hq-field.wide{grid-column:1/-1}.hq-field label{display:block;font-size:.64rem;color:var(--ink-soft);margin-bottom:4px}.hq-field input,.hq-field select,.hq-field textarea{width:100%;min-width:0;margin:0;padding:9px;border-radius:9px;border:1px solid rgba(169,139,216,.28);background:rgba(12,8,25,.65);color:var(--ink);font-size:.72rem;box-sizing:border-box}.hq-field textarea{min-height:64px}.hq-configactions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
       @media(max-width:420px){.hq-focus{align-items:flex-start;flex-wrap:wrap}.hq-focusbody{width:calc(100% - 64px)}.hq-focus button{width:100%;margin-left:62px}.hq-head{display:block}.hq-live{display:inline-block;margin-top:7px}}
       @media(max-width:420px){.hq-configgrid{grid-template-columns:1fr}.hq-field.wide{grid-column:auto}}
+      @media(max-width:420px){.hq-publishselects{grid-template-columns:1fr}}
       @media(max-width:360px){.hq-points{grid-template-columns:1fr}.hq-channels{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
@@ -439,7 +528,12 @@
       '</div>' +
       '<div class="hq-channels">' + CHANNELS.map(function (c) { return '<label class="hq-check"><input type="checkbox" data-hq-channel="' + c.id + '"' + (["thread","fb","video"].indexOf(c.id) >= 0 ? ' checked' : '') + '> ' + c.label + '</label>'; }).join("") + '</div>' +
       '<div class="hq-cost" id="hqVideoCost"></div>' +
-      '<div class="hq-videoengine"><b>🎬 影片流程：</b>腳本 → 分鏡 → 旁白 → 字幕 → MP4 → 成品驗收 → 待發布。<br><span id="hqVideoState">' + E(videoStateText()) + '</span><br>發布連線：YouTube／TikTok 實際上傳端點尚未串接。<div class="hq-subtools"><button class="hq-mini" id="hqUsageRefresh" type="button">查看費用與產片紀錄</button></div><div class="hq-usage" id="hqUsageBox" style="display:none"></div></div>' +
+      '<div class="hq-videoengine"><b>🎬 影片流程：</b>腳本 → 分鏡 → 旁白 → 字幕 → MP4 → 成品驗收 → 批准發布。<br><span id="hqVideoState">' + E(videoStateText()) + '</span><div class="hq-subtools"><button class="hq-mini" id="hqUsageRefresh" type="button">查看費用與產片紀錄</button></div><div class="hq-usage" id="hqUsageBox" style="display:none"></div></div>' +
+      '<div class="hq-publish"><strong>🔗 YouTube／TikTok 發布連線</strong>' +
+        '<div class="hq-publishrow"><div><div class="hq-publishname">▶ YouTube</div><span class="hq-publishstate" id="hqYoutubeState">' + E(publisherStateText("youtube")) + '</span></div><button class="hq-mini" id="hqYoutubeConnect" type="button">連接 YouTube</button></div>' +
+        '<div class="hq-publishrow"><div><div class="hq-publishname">♪ TikTok</div><span class="hq-publishstate" id="hqTiktokState">' + E(publisherStateText("tiktok")) + '</span></div><button class="hq-mini" id="hqTiktokConnect" type="button">連接 TikTok</button></div>' +
+        '<div class="hq-publishselects"><label>YouTube 發布可見度<select id="hqYoutubePrivacy"><option value="private">私人</option><option value="unlisted">不公開列出</option><option value="public">公開</option></select></label><label>TikTok 發布可見度<select id="hqTiktokPrivacy" disabled><option value="">授權後選擇</option></select></label></div>' +
+        '<div class="hq-publishnote">連接帳號不會發布影片。預設仍需先播放成品並批准；YouTube 新開發者專案與 TikTok 未審核應用可能被平台限制為私人內容。</div></div>' +
       '<div class="hq-avatar"><div class="hq-avatarhead"><img id="hqAvatarPreview" alt="目前人物預覽" style="display:none"><div><b id="hqAvatarTitle">👤 目前人物</b><span id="hqAvatarState">' + E(avatarStateText()) + '</span></div></div>' +
         '<div class="hq-avatarcontrols"><input id="hqAvatarFile" type="file" accept="image/jpeg,image/png"><button class="hq-mini primary" id="hqAvatarCreate" type="button">建立我的人物</button><button class="hq-mini" id="hqAvatarRefresh" type="button">查詢進度</button></div>' +
         '<div class="hq-avatarprivacy">照片只送往你的 HeyGen 帳號建立人物，不寫入公開網站；新影片完成前仍會先給你驗收。</div></div>' +
@@ -447,6 +541,7 @@
         '<label><input type="radio" name="hqApprovalMode" value="review"' + (approvalMode() === "review" ? " checked" : "") + '><span>先給我看，批准後執行<small>先批准腳本才產生 MP4；影片完成後會再次停在「成品待驗收」，不會自行發布。</small></span></label>' +
         '<label><input type="radio" name="hqApprovalMode" value="auto"' + (approvalMode() === "auto" ? " checked" : "") + '><span>免批准自動執行<small>目前可自動完成品質檢查與 MP4；發布連線完成後才會自動上傳 YouTube／TikTok。</small></span></label>' +
         '<label class="hq-paidtoggle"><input type="checkbox" id="hqAutoPaidVideo"><span>允許排程自動使用付費產片<small>未勾選時，即使選免批准，也會在花費 HeyGen 餘額前停下。</small></span></label>' +
+        '<label class="hq-paidtoggle"><input type="checkbox" id="hqAutoPublish"><span>允許免批准模式自動發布<small>只有帳號完成授權、影片完成品質檢查後才會使用；預設保持關閉。</small></span></label>' +
       '</div>' +
       '<div class="hq-note">AI 會依目前主打產品建立快照，先做策略，再分平台產出，最後送你批准。</div>' +
       '<button class="btn" id="hqCreate">建立任務並開始產線 ▶</button><div id="hqCreateMsg"></div>' +
@@ -553,6 +648,16 @@
       return '<button class="hq-mini primary" data-hq-videopoll="' + E(t.id) + '" data-hq-videoch="' + E(channel) + '">⏳ 查詢 ' + label + ' 進度</button>';
     return '<button class="hq-mini primary" data-hq-video="' + E(t.id) + '" data-hq-videoch="' + E(channel) + '">' + icon + ' 產生 ' + label + ' MP4</button>';
   }
+  function publishActionButton(t, provider) {
+    var platform = publishConfigState[provider] || {}, job = t.publishJobs && t.publishJobs[provider], label = publisherLabel(provider), icon = provider === "youtube" ? "▶" : "♪";
+    if (job && job.status === "published")
+      return (job.url ? '<a class="hq-mini primary" href="' + E(job.url) + '" target="_blank" rel="noopener">✅ 查看 ' + label + '</a>' : '<span class="hq-mini">✅ ' + label + ' 已發布</span>') + '<div class="hq-publishjob">發布完成・' + E(job.privacy || "") + '</div>';
+    if (job && ["uploading", "processing"].indexOf(job.status) >= 0)
+      return '<button class="hq-mini primary" data-hq-publishpoll="' + E(t.id) + '" data-hq-provider="' + provider + '">⏳ 查詢 ' + label + ' 發布進度</button><div class="hq-publishjob">正在上傳或由平台處理中</div>';
+    if (!platform.connected)
+      return '<button class="hq-mini" disabled>' + icon + ' 請先連接 ' + label + '</button>';
+    return '<button class="hq-mini primary" data-hq-publish="' + E(t.id) + '" data-hq-provider="' + provider + '">' + icon + ' 發布到 ' + label + '</button>' + (job && job.failure ? '<div class="hq-publishjob failed">' + E(job.failure) + '</div>' : '');
+  }
   function qualityHtml(t) {
     if (!t.quality) return "";
     var q = t.quality;
@@ -582,7 +687,12 @@
       if (channels.indexOf("youtube") >= 0) platformButtons += videoActionButton(t, "youtube", "▶", "YouTube");
       if (channels.indexOf("tiktok") >= 0) platformButtons += videoActionButton(t, "tiktok", "♪", "TikTok");
       if (channels.indexOf("video") >= 0) platformButtons += videoActionButton(t, "video", "◎", "Reels／Shorts");
-      return '<div class="hq-minirow">' + platformButtons + '<button class="hq-mini" data-hq-done="' + E(t.id) + '">標記為已發布</button></div><div class="hq-actionnote">「標記為已發布」只會更新紀錄，不會替你上傳或發布內容。</div>';
+      var publishButtons = '';
+      if (t.finalApprovedAt) {
+        if (channels.indexOf("youtube") >= 0) publishButtons += publishActionButton(t, "youtube");
+        if (channels.indexOf("tiktok") >= 0) publishButtons += publishActionButton(t, "tiktok");
+      }
+      return '<div class="hq-minirow">' + platformButtons + publishButtons + '<button class="hq-mini" data-hq-done="' + E(t.id) + '">手動發布後標記完成</button></div><div class="hq-actionnote">真正發布按鈕只會在成品批准後出現；手動標記不會替你上傳內容。</div>';
     }
     return "";
   }
@@ -1053,8 +1163,13 @@
     document.getElementById("hqVoiceCreate").addEventListener("click", createVoice);
     document.getElementById("hqVoiceRefresh").addEventListener("click", function () { pollVoice(false); });
     document.getElementById("hqUsageRefresh").addEventListener("click", loadVideoUsage);
+    document.getElementById("hqYoutubeConnect").addEventListener("click", function () { connectPublisher("youtube"); });
+    document.getElementById("hqTiktokConnect").addEventListener("click", function () { connectPublisher("tiktok"); });
+    document.getElementById("hqYoutubePrivacy").addEventListener("change", function () { syncConfig(); });
+    document.getElementById("hqTiktokPrivacy").addEventListener("change", function () { syncConfig(); });
     document.querySelectorAll("[data-hq-channel]").forEach(function (input) { input.addEventListener("change", renderVideoCost); });
     document.getElementById("hqAutoPaidVideo").addEventListener("change", function () { syncConfig(); });
+    document.getElementById("hqAutoPublish").addEventListener("change", function () { syncConfig(); });
     document.getElementById("hqSyncTools").addEventListener("click", function () {
       document.getElementById("hqSyncBox").classList.toggle("on");
       var input = document.getElementById("hqWorkspaceInput");
@@ -1091,6 +1206,8 @@
       if (b.dataset.hqDone) { var completed = findTask(b.dataset.hqDone); updateTask(b.dataset.hqDone, { state: "done", publishedAt: Date.now() }); cleanupOnceAssets(completed); render(); }
       if (b.dataset.hqVideo) startVideo(b.dataset.hqVideo, b.dataset.hqVideoch);
       if (b.dataset.hqVideopoll) pollVideo(b.dataset.hqVideopoll, b.dataset.hqVideoch, false);
+      if (b.dataset.hqPublish) publishTaskVideo(b.dataset.hqPublish, b.dataset.hqProvider);
+      if (b.dataset.hqPublishpoll) pollPublish(b.dataset.hqPublishpoll, b.dataset.hqProvider);
       if (b.dataset.hqDel) {
         var removed = findTask(b.dataset.hqDel); cleanupOnceAssets(removed);
         var rows = read().filter(function (x) { return x.id !== b.dataset.hqDel; }); write(rows); remoteDelete(b.dataset.hqDel); render();
@@ -1115,6 +1232,7 @@
     remoteHydrate(false).then(function () { syncConfig(); resumeVideoPolling(); });
     loadAssetLibrary(); renderVideoCost();
     checkVideoConfig();
+    checkPublishConfig(new URLSearchParams(location.search).has("oauth"));
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();

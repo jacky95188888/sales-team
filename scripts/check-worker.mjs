@@ -33,6 +33,13 @@ const requiredRoutes = [
   "/voice-status",
   "/video-create",
   "/video-status",
+  "/publish-config",
+  "/oauth-start",
+  "/oauth-disconnect",
+  "/oauth/youtube/callback",
+  "/oauth/tiktok/callback",
+  "/publish-video",
+  "/publish-status",
 ];
 
 for (const route of requiredRoutes) {
@@ -45,9 +52,16 @@ assert.match(hq, /江星瑤正在編排鏡頭/);
 assert.match(hq, /lineup\.hq-hidden/);
 assert.match(hq, /現在輪到 .*・第 .*／7 步/);
 assert.match(hq, /進行中的任務/);
-assert.match(hq, /標記為已發布.*只會更新紀錄/);
+assert.match(hq, /真正發布按鈕只會在成品批准後出現/);
 assert.match(hq, /\["approval", "video_review", "done"\]\.indexOf\(x\.state\) < 0/);
-assert.match(hq, /實際上傳端點尚未串接/);
+assert.match(hq, /YouTube／TikTok 發布連線/);
+assert.match(hq, /連接帳號不會發布影片/);
+assert.match(hq, /允許免批准模式自動發布/);
+assert.match(worker, /youtubePublish/);
+assert.match(worker, /tiktokPublish/);
+assert.match(worker, /hqProcessAutoPublish/);
+assert.match(worker, /youtube\.upload/);
+assert.match(worker, /video\.publish/);
 assert.match(hq, /以我的陳述為主/);
 assert.match(hq, /存入常用素材庫/);
 assert.match(hq, /建立長期專屬聲音/);
@@ -74,7 +88,14 @@ assert.deepEqual(config.triggers?.crons, [
   "0 13 * * *",
 ]);
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
-assert.deepEqual(config.secrets?.optional, ["HEYGEN_API_KEY"]);
+assert.deepEqual(config.secrets?.optional, [
+  "HEYGEN_API_KEY",
+  "PUBLISH_TOKEN_KEY",
+  "YOUTUBE_CLIENT_ID",
+  "YOUTUBE_CLIENT_SECRET",
+  "TIKTOK_CLIENT_KEY",
+  "TIKTOK_CLIENT_SECRET",
+]);
 
 const filesToScan = [
   worker,
