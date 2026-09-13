@@ -27,10 +27,11 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .lineup .nm{font-size:.64rem;color:var(--gold-lt);margin-top:3px;line-height:1.2;}
 .lineup .nm small{display:block;color:var(--purple-lt);font-size:.58rem;}
 /* tabs */
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;-webkit-overflow-scrolling:touch;}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;overscroll-behavior-x:contain;}
 .tabs::-webkit-scrollbar{display:none;}
-.tabs button{flex:0 0 auto;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 13px;font-size:.8rem;color:var(--ink);white-space:nowrap;}
+.tabs button{flex:0 0 auto;background:linear-gradient(160deg,#3a2960,#2c1f4d);border:1px solid var(--purple);border-radius:18px;padding:8px 13px;font-size:.8rem;color:var(--ink);white-space:nowrap;scroll-snap-align:center;}
 .tabs button.active{background:linear-gradient(180deg,var(--gold-lt),var(--gold-dk));color:#3a2400;font-weight:800;border-color:var(--gold);box-shadow:0 0 12px rgba(232,194,103,.4);}
+.tabs-hint{display:none;text-align:right;color:var(--purple-lt);font-size:.68rem;margin:0 3px 9px;}
 .page{display:none;} .page.show{display:block;}
 /* panel 金框 */
 .panel{background:linear-gradient(160deg,rgba(44,31,77,.92),rgba(30,20,56,.92));border-radius:18px;padding:15px;margin-bottom:14px;position:relative;box-shadow:0 8px 26px rgba(0,0,0,.4);}
@@ -58,7 +59,7 @@ textarea{min-height:48px;font-weight:600;}
 .pick{margin-top:8px;display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--ink-soft);}
 .pick input{width:18px;height:18px;accent-color:var(--gold-dk);}
 .copy{margin-top:8px;background:rgba(20,13,38,.6);border:1px solid var(--purple);border-radius:8px;padding:6px 13px;font-size:.75rem;color:var(--ink-soft);}
-.out{background:linear-gradient(160deg,rgba(58,42,26,.5),rgba(44,31,18,.5));border:1px solid var(--gold-dk);border-left:3px solid var(--gold);border-radius:12px;padding:13px;font-size:.92rem;white-space:pre-wrap;margin-top:11px;}
+.out{background:linear-gradient(160deg,rgba(58,42,26,.5),rgba(44,31,18,.5));border:1px solid var(--gold-dk);border-left:3px solid var(--gold);border-radius:12px;padding:13px;font-size:.92rem;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:11px;}
 .status{text-align:center;font-size:.85rem;color:var(--purple-lt);padding:12px;}
 .err{background:rgba(120,30,30,.55);border:1px solid #c0506a;color:#ffd0d0;padding:12px;border-radius:10px;font-size:.83rem;white-space:pre-wrap;margin-top:9px;}
 .ceobar{display:flex;align-items:center;gap:9px;background:linear-gradient(160deg,rgba(44,31,77,.9),rgba(30,20,56,.9));border:1px solid rgba(232,194,103,.35);border-radius:14px;padding:11px 14px;margin-bottom:12px;font-size:.84rem;color:var(--ink-soft);}
@@ -80,6 +81,7 @@ input[type=file]{padding:10px;font-size:.85rem;}
 .nav button{background:none;border:none;color:var(--ink-soft);font-size:.62rem;display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;padding:2px;}
 .nav button.active{color:var(--gold-lt);}
 .nav .ic{font-size:1.1rem;}
+@media(max-width:720px){.tabs-hint{display:block}}
 </style></head><body><div class="wrap">
 <div class="deco">✦ ❖ ✦</div>
 <div class="header">
@@ -101,6 +103,7 @@ input[type=file]{padding:10px;font-size:.85rem;}
   <button data-p="profile">⚙️ 我的產品</button>
   <button data-p="minutes">🗒 會議記錄</button>
 </div>
+<div class="tabs-hint" aria-hidden="true">左右滑動查看更多工具 →</div>
 
 <!-- 開會 -->
 <div class="page show" id="p_meet">
@@ -134,7 +137,8 @@ input[type=file]{padding:10px;font-size:.85rem;}
   <label class="lbl" style="margin-top:9px">產出形式</label>
   <div class="chrow" id="chrow">
     <button data-ch="fb" class="on">FB 貼文</button><button data-ch="thread">Threads</button>
-    <button data-ch="video">短影音腳本</button><button data-ch="line">LINE 訊息</button>
+    <button data-ch="video">Reels／Shorts</button><button data-ch="tiktok">TikTok</button>
+    <button data-ch="youtube">YouTube</button><button data-ch="line">LINE 訊息</button>
   </div>
   <button class="btn" id="runExec" onclick="doExecute()">執行官產出成品 ▶</button>
   <div class="hint">產出可直接複製貼上就發的成品。剛開完會會自動參考顧問方向。</div>
@@ -259,6 +263,8 @@ function switchTo(p){
   document.querySelectorAll("#navbar button").forEach(x=>x.classList.toggle("active",x.dataset.p===p));
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("show"));
   document.getElementById("p_"+p).classList.add("show");
+  var activeTab=document.querySelector('#tabs button[data-p="'+p+'"]'),tabs=document.getElementById("tabs");
+  if(activeTab&&tabs)tabs.scrollTo({left:Math.max(0,activeTab.offsetLeft-(tabs.clientWidth-activeTab.offsetWidth)/2),behavior:"smooth"});
   if(p==="record")renderRecords();
   if(p==="minutes")renderMinutes();
   if(p==="meet")renderCurProdBar();
@@ -501,6 +507,5 @@ renderProds();renderMinutes();
 <script src="pipeline-patch.js"></script>
 <script src="minutes-patch.js"></script>
 <script src="boost-patch.js"></script>
-<script src="hq-patch.js"></script>
+<script src="hq-patch.js?v=creator-v6"></script>
 </body></html>
-

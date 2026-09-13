@@ -77,6 +77,7 @@ assert.equal(listed.tasks.length, 0);
 assert.deepEqual(JSON.parse(await env.MONITOR.get("hq:workspaces")), [workspaceId]);
 
 const nativeFetch = globalThis.fetch;
+let videoAgentRequest = null;
 globalThis.fetch = async (input, init) => {
   if (String(input).endsWith("/v3/users/me")) {
     return new Response(JSON.stringify({ data: { id: "user_test", billing_type: "wallet", wallet: { currency: "credits", remaining_balance: 30 } } }), {
@@ -84,8 +85,59 @@ globalThis.fetch = async (input, init) => {
       headers: { "Content-Type": "application/json" },
     });
   }
+  if (String(input).endsWith("/v3/avatars") && init?.method === "POST") {
+    const body = JSON.parse(init.body);
+    const styled = body.type === "prompt";
+    return new Response(JSON.stringify({ data: { avatar_item: { id: styled ? "look_style" : "look_face", group_id: "group_sanbao", status: "processing" } } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/assets") && init?.method === "POST") {
+    return new Response(JSON.stringify({ data: { asset_id: "asset_test" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/assets/asset_test") && (!init?.method || init.method === "GET")) {
+    return new Response(JSON.stringify({ data: { id: "asset_test", url: "https://files.heygen.ai/material.jpg", type: "image/jpeg" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/voices/clone") && init?.method === "POST") {
+    return new Response(JSON.stringify({ data: { voice_clone_id: "voice_test" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/voices/voice_test")) {
+    return new Response(JSON.stringify({ data: { id: "voice_test", status: "complete" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/avatars/looks/look_face")) {
+    return new Response(JSON.stringify({ data: { id: "look_face", status: "completed", preview_image_url: "https://files.heygen.ai/face.jpg" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).endsWith("/v3/avatars/looks/look_style")) {
+    return new Response(JSON.stringify({ data: { id: "look_style", status: "completed", preview_image_url: "https://files.heygen.ai/style.jpg" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   if (String(input).endsWith("/v3/video-agents") && init?.method === "POST") {
+    videoAgentRequest = JSON.parse(init.body);
     return new Response(JSON.stringify({ data: { session_id: "sess_test", status: "generating", video_id: null } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (String(input).includes("/v3/video-agents?limit=50") && (!init?.method || init.method === "GET")) {
+    return new Response(JSON.stringify({ data: [{ session_id: "sess_test", created_at: 1789261200, title: "天衡短影音" }] }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -120,10 +172,44 @@ globalThis.fetch = async (input, init) => {
 };
 env.ANTHROPIC_KEY = "test-only-not-a-real-key";
 env.HEYGEN_API_KEY = "test-only-not-a-real-heygen-key";
+const preAvatarConfig = await post("/video-config", { workspaceId });
+assert.equal(preAvatarConfig.ready, false);
+assert.equal(preAvatarConfig.avatarReady, false);
+assert.equal(preAvatarConfig.billing.remaining, 30);
+
+await post("/avatar-create", {
+  workspaceId,
+  mediaType: "image/jpeg",
+  image: "YWJjZA==",
+});
+let avatarStatus = await post("/avatar-status", { workspaceId });
+assert.equal(avatarStatus.avatar.status, "building_style");
+avatarStatus = await post("/avatar-status", { workspaceId });
+assert.equal(avatarStatus.avatar.status, "ready");
+assert.equal(avatarStatus.avatar.selectedLookId, "look_style");
+
 const readyVideoConfig = await post("/video-config", { workspaceId });
 assert.equal(readyVideoConfig.ready, true);
-assert.equal(readyVideoConfig.billing.remaining, 30);
+assert.equal(readyVideoConfig.avatarReady, true);
+const videoUsage = await post("/video-usage", { workspaceId });
+assert.equal(videoUsage.billing.remaining, 30);
+assert.equal(videoUsage.sessions.length, 1);
+assert.equal(videoUsage.sessions[0].title, "天衡短影音");
 
+const uploadedAsset = await post("/media-assets", {
+  action: "upload", workspaceId, scope: "persistent", name: "天衡示範.jpg", mediaType: "image/jpeg", data: "YWJjZA==",
+});
+assert.equal(uploadedAsset.asset.id, "asset_test");
+const savedAssets = await post("/media-assets", { action: "list", workspaceId });
+assert.equal(savedAssets.assets.length, 1);
+await post("/voice-create", { workspaceId, mediaType: "audio/webm", audio: "YWJjZA==" });
+const voiceStatus = await post("/voice-status", { workspaceId });
+assert.equal(voiceStatus.voice.status, "ready");
+
+task.contentMode = "statement";
+task.statement = "我認為命理應該提供可以執行的下一步。";
+task.assets = [uploadedAsset.asset];
+task.updatedAt = 3;
 await post("/hq-tasks", { action: "upsert", workspaceId, task });
 const createdVideo = await post("/video-create", {
   workspaceId,
@@ -131,6 +217,11 @@ const createdVideo = await post("/video-create", {
   channel: "tiktok",
 });
 assert.equal(createdVideo.job.sessionId, "sess_test");
+assert.equal(videoAgentRequest.avatar_id, "look_style");
+assert.equal(videoAgentRequest.voice_id, "voice_test");
+assert.equal(videoAgentRequest.files[0].url, "https://files.heygen.ai/material.jpg");
+assert.match(videoAgentRequest.prompt, /創作者親自陳述/);
+assert.match(videoAgentRequest.prompt, /每 3～5 秒/);
 const finishedVideo = await post("/video-status", {
   workspaceId,
   taskId: task.id,

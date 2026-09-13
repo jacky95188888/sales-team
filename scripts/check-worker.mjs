@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const worker = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
+const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
 const config = JSON.parse(
   readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
 );
@@ -24,6 +25,12 @@ const requiredRoutes = [
   "/hq-config",
   "/hq-tasks",
   "/video-config",
+  "/video-usage",
+  "/avatar-create",
+  "/avatar-status",
+  "/media-assets",
+  "/voice-create",
+  "/voice-status",
   "/video-create",
   "/video-status",
 ];
@@ -31,6 +38,24 @@ const requiredRoutes = [
 for (const route of requiredRoutes) {
   assert.ok(worker.includes(`"${route}"`), `Missing Worker route: ${route}`);
 }
+
+assert.match(hq, /hq-mode input\[type=radio\].*width:20px!important/);
+assert.match(hq, /目前第 .*／7 步/);
+assert.match(hq, /江星瑤正在編排鏡頭/);
+assert.match(hq, /lineup\.hq-hidden/);
+assert.match(hq, /現在輪到 .*・第 .*／7 步/);
+assert.match(hq, /進行中的任務/);
+assert.match(hq, /標記為已發布.*只會更新紀錄/);
+assert.match(hq, /\["approval", "video_review", "done"\]\.indexOf\(x\.state\) < 0/);
+assert.match(hq, /實際上傳端點尚未串接/);
+assert.match(hq, /以我的陳述為主/);
+assert.match(hq, /存入常用素材庫/);
+assert.match(hq, /建立長期專屬聲音/);
+assert.match(hq, /目前會建立 .* 支付費 MP4/);
+assert.match(hq, /允許排程自動使用付費產片/);
+assert.match(worker, /config\.autoVideoEnabled === true/);
+assert.match(worker, /request\.voice_id = voice\.id/);
+assert.match(worker, /request\.files = files/);
 
 assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");

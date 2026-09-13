@@ -19,6 +19,12 @@ const ROUTES = new Set([
   "/hq-config",
   "/hq-tasks",
   "/video-config",
+  "/video-usage",
+  "/avatar-create",
+  "/avatar-status",
+  "/media-assets",
+  "/voice-create",
+  "/voice-status",
   "/video-create",
   "/video-status",
 ]);
@@ -442,10 +448,11 @@ async function hqConfig(env, b) {
   const config = {
     workspaceId: id,
     autoEnabled: b.autoEnabled !== false,
+    autoVideoEnabled: b.autoVideoEnabled === true,
     approvalMode: b.approvalMode === "auto" ? "auto" : "review",
     profile: hqSafeObject(b.profile),
     product: hqSafeObject(b.product, 8000),
-    channels: channels.length ? channels : ["thread", "fb", "video", "tiktok", "youtube"],
+    channels: channels.length ? channels : ["thread", "fb", "video"],
     updatedAt: Date.now(),
   };
   await env.MONITOR.put(key, JSON.stringify(config));
@@ -503,6 +510,8 @@ async function videoConfig(env, b) {
   let apiError = null;
   let billing = null;
   let creditReady = true;
+  let avatar = null;
+  let voice = null;
   try {
     ownerReady = await videoOwner(env, b.workspaceId, true);
   } catch {}
@@ -546,6 +555,12 @@ async function videoConfig(env, b) {
       apiError = String(error?.message || error).slice(0, 200);
     }
   }
+  if (ownerReady && env.MONITOR) {
+    const id = hqWorkspaceId(b.workspaceId);
+    avatar = JSON.parse((await env.MONITOR.get("hq:avatar:" + id)) || "null");
+    voice = JSON.parse((await env.MONITOR.get("hq:voice:" + id)) || "null");
+  }
+  const avatarReady = avatar?.status === "ready" && !!avatar?.selectedLookId;
   return {
     provider: "heygen",
     apiReady: !!env.HEYGEN_API_KEY,
@@ -554,8 +569,40 @@ async function videoConfig(env, b) {
     ownerReady,
     creditReady,
     billing,
-    ready: apiValid && ownerReady && creditReady,
+    avatar: avatar
+      ? {
+          status: avatar.status,
+          name: avatar.name,
+          previewImageUrl: avatar.previewImageUrl || null,
+          selectedLookId: avatar.selectedLookId || null,
+          failure: avatar.failure || null,
+        }
+      : null,
+    avatarReady,
+    voice: voice ? { id: voice.id, status: voice.status, name: voice.name, failure: voice.failure || null } : null,
+    voiceReady: voice?.status === "ready",
+    ready: apiValid && ownerReady && creditReady && avatarReady,
     platforms: ["video", "tiktok", "youtube"],
+  };
+}
+async function videoUsage(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const account = await heygen(env, "/v3/users/me");
+  const sessions = await heygen(env, "/v3/video-agents?limit=50");
+  let billing = null;
+  if (account?.billing_type === "wallet") {
+    const remaining = Number(account.wallet?.remaining_balance);
+    billing = { type: "wallet", currency: String(account.wallet?.currency || "credits"), remaining: Number.isFinite(remaining) ? remaining : null };
+  } else if (account?.billing_type === "subscription") {
+    billing = { type: "subscription", plan: String(account.subscription?.plan || "unknown") };
+  }
+  return {
+    billing,
+    sessions: (Array.isArray(sessions) ? sessions : []).slice(0, 50).map((item) => ({
+      sessionId: String(item?.session_id || "").slice(0, 160),
+      title: String(item?.title || "未命名影片").slice(0, 200),
+      createdAt: Number(item?.created_at || 0),
+    })),
   };
 }
 async function requireVideoAccess(env, workspaceId) {
@@ -568,6 +615,198 @@ async function requireVideoAccess(env, workspaceId) {
     throw Object.assign(new Error("這個同步碼沒有影片產生權限"), {
       status: 403,
     });
+}
+function mediaAssetKey(workspaceId) {
+  return "hq:assets:" + hqWorkspaceId(workspaceId);
+}
+function voiceKey(workspaceId) {
+  return "hq:voice:" + hqWorkspaceId(workspaceId);
+}
+function base64Bytes(value) {
+  const raw = atob(String(value || "")), bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+async function heygenUploadAsset(env, input) {
+  const mediaType = String(input.mediaType || "").toLowerCase(),
+    allowed = new Set(["image/jpeg", "image/png", "video/mp4", "video/webm", "audio/mpeg", "audio/wav", "audio/webm", "audio/mp4", "application/pdf", "application/x-subrip"]),
+    image = String(input.data || "");
+  if (!allowed.has(mediaType))
+    throw Object.assign(new Error("不支援這個素材格式"), { status: 400 });
+  if (!image || image.length > 6_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image))
+    throw Object.assign(new Error("素材缺少、格式錯誤或超過 4.5MB"), { status: 413 });
+  const name = String(input.name || "material").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 100),
+    form = new FormData();
+  form.append("file", new Blob([base64Bytes(image)], { type: mediaType }), name);
+  const response = await fetch("https://api.heygen.com/v3/assets", {
+    method: "POST",
+    headers: { "X-Api-Key": env.HEYGEN_API_KEY },
+    body: form,
+  });
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { error: text.slice(0, 300) }; }
+  if (!response.ok)
+    throw Object.assign(new Error(String(data?.error?.message || data?.message || data?.error || `HeyGen ${response.status}`).slice(0, 500)), { status: response.status >= 500 ? 502 : response.status });
+  return data?.data || data;
+}
+async function heygenAssetWithUrl(env, uploaded) {
+  const assetId = String(uploaded?.asset_id || uploaded?.id || "").slice(0, 160);
+  if (!assetId) return uploaded || {};
+  if (uploaded?.url) return uploaded;
+  const details = await heygen(env, "/v3/assets/" + encodeURIComponent(assetId));
+  return { ...uploaded, ...details, asset_id: assetId };
+}
+async function mediaAssets(env, b) {
+  if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const key = mediaAssetKey(b.workspaceId),
+    assets = JSON.parse((await env.MONITOR.get(key)) || "[]");
+  if ((b.action || "list") === "list") return { assets };
+  await requireVideoAccess(env, b.workspaceId);
+  if (b.action === "delete") {
+    const assetId = String(b.assetId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 120),
+      next = assets.filter((item) => item && item.id !== assetId);
+    if (assetId) {
+      try { await heygen(env, "/v3/assets/" + encodeURIComponent(assetId), { method: "DELETE" }); } catch {}
+    }
+    await env.MONITOR.put(key, JSON.stringify(next));
+    return { ok: true, assets: next };
+  }
+  const uploaded = await heygenAssetWithUrl(env, await heygenUploadAsset(env, b)),
+    asset = {
+      id: String(uploaded.asset_id || uploaded.id || "").slice(0, 160),
+      url: String(uploaded.url || "").slice(0, 1200),
+      name: String(b.name || "素材").slice(0, 100),
+      mediaType: String(uploaded.mime_type || b.mediaType || "").slice(0, 100),
+      scope: b.scope === "persistent" ? "persistent" : "once",
+      createdAt: Date.now(),
+    };
+  if (!asset.id || !asset.url) throw Object.assign(new Error("HeyGen 沒有回傳素材資料"), { status: 502 });
+  if (asset.scope === "persistent")
+    await env.MONITOR.put(key, JSON.stringify([asset, ...assets.filter((x) => x && x.id !== asset.id)].slice(0, 30)));
+  return { ok: true, asset };
+}
+async function voiceCreate(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const asset = await heygenAssetWithUrl(env, await heygenUploadAsset(env, { data: b.audio, mediaType: b.mediaType, name: "sanbao-voice." + (String(b.mediaType).includes("webm") ? "webm" : "mp4") })),
+    result = await heygen(env, "/v3/voices/clone", {
+      method: "POST",
+      body: JSON.stringify({ audio: { type: "url", url: asset.url }, voice_name: "三寶爸專屬聲音", language: "zh", remove_background_noise: true }),
+    }),
+    voice = { id: String(result?.voice_clone_id || result?.voice_id || "").slice(0, 160), status: "processing", name: "三寶爸專屬聲音", createdAt: Date.now(), updatedAt: Date.now() };
+  if (!voice.id) throw Object.assign(new Error("HeyGen 沒有回傳聲音工作編號"), { status: 502 });
+  await env.MONITOR.put(voiceKey(b.workspaceId), JSON.stringify(voice));
+  return { ok: true, voice };
+}
+async function voiceStatus(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const key = voiceKey(b.workspaceId), voice = JSON.parse((await env.MONITOR.get(key)) || "null");
+  if (!voice?.id) return { voice: null };
+  try {
+    const result = await heygen(env, "/v3/voices/" + encodeURIComponent(voice.id)), status = String(result?.status || "").toLowerCase();
+    voice.status = ["complete", "completed", "ready"].includes(status) ? "ready" : (["failed", "error"].includes(status) ? "failed" : "processing");
+    voice.failure = result?.failure_message || result?.error || null;
+  } catch (error) {
+    voice.failure = String(error?.message || error).slice(0, 300);
+  }
+  voice.updatedAt = Date.now();
+  await env.MONITOR.put(key, JSON.stringify(voice));
+  return { ok: true, voice };
+}
+function avatarKey(workspaceId) {
+  return "hq:avatar:" + hqWorkspaceId(workspaceId);
+}
+function avatarItem(result) {
+  return result?.avatar_item || result?.avatar || result;
+}
+async function avatarCreate(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  if (!env.MONITOR)
+    throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const mediaType = String(b.mediaType || "").toLowerCase(),
+    image = String(b.image || "");
+  if (!["image/jpeg", "image/png"].includes(mediaType))
+    throw Object.assign(new Error("請使用 JPEG 或 PNG 正面照片"), { status: 400 });
+  if (!image || image.length > 6_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image))
+    throw Object.assign(new Error("照片缺少、格式錯誤或檔案過大"), { status: 413 });
+  const result = await heygen(env, "/v3/avatars", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "photo",
+        name: "三寶爸專屬人物",
+        file: { type: "base64", media_type: mediaType, data: image },
+      }),
+    }),
+    item = avatarItem(result),
+    lookId = item?.id || item?.avatar_id;
+  if (!lookId)
+    throw Object.assign(new Error("HeyGen 沒有回傳人物編號"), { status: 502 });
+  const avatar = {
+    name: "三寶爸專屬人物",
+    status: "building_face",
+    baseLookId: lookId,
+    groupId: item?.group_id || null,
+    previewImageUrl: item?.preview_image_url || item?.image_url || null,
+    selectedLookId: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  await env.MONITOR.put(avatarKey(b.workspaceId), JSON.stringify(avatar));
+  return { ok: true, avatar };
+}
+async function avatarStatus(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  if (!env.MONITOR)
+    throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const key = avatarKey(b.workspaceId),
+    avatar = JSON.parse((await env.MONITOR.get(key)) || "null");
+  if (!avatar?.baseLookId)
+    throw Object.assign(new Error("尚未建立專屬人物"), { status: 404 });
+  try {
+    const currentId = avatar.styledLookId || avatar.baseLookId,
+      result = await heygen(
+        env,
+        "/v3/avatars/looks/" + encodeURIComponent(currentId),
+      ),
+      item = avatarItem(result),
+      status = String(item?.status || "processing").toLowerCase();
+    avatar.previewImageUrl =
+      item?.preview_image_url || item?.image_url || avatar.previewImageUrl || null;
+    if (!avatar.styledLookId && status === "completed") {
+      const styledResult = await heygen(env, "/v3/avatars", {
+          method: "POST",
+          body: JSON.stringify({
+            type: "prompt",
+            name: "三寶爸－深藍西裝分析室",
+            avatar_id: avatar.baseLookId,
+            prompt:
+              "Taiwanese male presenter, same face and identity as the reference, natural realistic proportions, medium full-body framing, wearing a fitted charcoal navy blazer over a clean white crew-neck shirt and dark trousers, confident friendly posture, modern bright office with a city window, warm cinematic key light, premium editorial photography, realistic skin, hands visible and anatomically correct",
+          }),
+        }),
+        styled = avatarItem(styledResult),
+        styledLookId = styled?.id || styled?.avatar_id;
+      if (!styledLookId) throw new Error("HeyGen 沒有回傳造型編號");
+      avatar.styledLookId = styledLookId;
+      avatar.status = "building_style";
+    } else if (avatar.styledLookId && status === "completed") {
+      avatar.status = "ready";
+      avatar.selectedLookId = avatar.styledLookId;
+    } else if (status === "failed") {
+      avatar.status = "failed";
+      avatar.failure = item?.failure_message || "人物建立失敗";
+    } else {
+      avatar.status = avatar.styledLookId ? "building_style" : "building_face";
+    }
+  } catch (error) {
+    avatar.failure = String(error?.message || error).slice(0, 300);
+    if ((error?.status || 0) >= 400 && (error?.status || 0) < 500)
+      avatar.status = "failed";
+  }
+  avatar.updatedAt = Date.now();
+  await env.MONITOR.put(key, JSON.stringify(avatar));
+  return { ok: true, avatar };
 }
 async function hqTaskForVideo(env, workspaceId, taskId) {
   if (!env.MONITOR)
@@ -611,6 +850,17 @@ function videoPrompt(task, channel) {
     `製作一支繁體中文、台灣口語的 ${label}，長度 ${duration}。`,
     `主題：${String(task.goal || "").slice(0, 1000)}`,
     `產品：${String(task.product?.name || "目前主打產品").slice(0, 120)}`,
+    task.contentMode === "statement" && task.statement
+      ? `創作者親自陳述：${String(task.statement).slice(0, 4000)}\n必須保留這段陳述的核心立場與語氣，不可改成相反意思。`
+      : "內容由 AI 自動構建，但要有明確觀點、真實情境與可執行下一步。",
+    Array.isArray(task.assets) && task.assets.length
+      ? `已附上 ${Math.min(task.assets.length, 20)} 個指定素材。優先把它們安排進與旁白直接相關的鏡頭；禁止只當無意義背景或忽略。`
+      : "沒有指定素材時，才由系統依旁白選擇相關情境畫面。",
+    "品牌視覺：天衡深藍金，高級、可信任、台灣在地感；繁體中文字幕使用高對比白字與金色重點字，避開上下平台介面安全區。",
+    "這不是單一人物念稿。每 3～5 秒必須有一次有意義的鏡頭或構圖變化，人物出鏡約 40%、主題相關情境素材約 40%、文字圖解約 20%。",
+    "固定六段式：①0～3秒問題鉤子動態字卡；②人物出場提出問題；③與該句旁白直接相關的情境畫面；④時間軸、步驟、對照或概念圖解；⑤人物回到畫面給具體解讀；⑥最後3～5秒以留言或私訊行動收尾。",
+    "旁白提到等待要出現時鐘、日曆或未讀訊息；提到選擇要出現岔路或選項；提到工作要出現真實辦公情境；提到命理階段要出現抽象但精緻的命盤局部與時間軸。禁止無關素材、隨機漂浮方塊、長時間同一鏡位。",
+    "人物說話時使用中景或半身，情境段落可只保留旁白；加入柔和低音量背景音樂、少量轉場音效，不能蓋過人聲。",
     "必須使用自然口吻、清楚字幕、前三秒有鉤子、畫面節奏明快；不得宣稱療效、保證獲利或成功。",
     "以下是已通過內容產線的腳本與分鏡，請忠實製作，不要杜撰價格、數據或見證：",
     String(task.outputs?.[channel] || task.outputs?.video || "").slice(0, 7500),
@@ -691,15 +941,34 @@ async function createVideoForRecord(env, record, channel) {
     ].includes(old.status)
   )
     return { ok: true, reused: true, job: old };
+  const avatar = JSON.parse(
+    (await env.MONITOR.get(avatarKey(record.id))) || "null",
+  );
+  const voice = JSON.parse(
+    (await env.MONITOR.get(voiceKey(record.id))) || "null",
+  );
+  if (avatar?.status !== "ready" || !avatar?.selectedLookId)
+    throw Object.assign(
+      new Error("請先在營運總部完成『三寶爸專屬人物』設定，避免再產生陌生人物"),
+      { status: 409 },
+    );
   await videoRateLimit(env, record.id);
+  const request = {
+    prompt: videoPrompt(record.task, channel),
+    avatar_id: avatar.selectedLookId,
+    mode: "generate",
+    orientation: channel === "youtube" ? "landscape" : "portrait",
+    incognito_mode: true,
+  };
+  if (voice?.status === "ready" && voice.id) request.voice_id = voice.id;
+  const files = (Array.isArray(record.task.assets) ? record.task.assets : [])
+    .filter((item) => item && /^https:\/\//.test(String(item.url || "")))
+    .slice(0, 20)
+    .map((item) => ({ type: "url", url: String(item.url).slice(0, 1200) }));
+  if (files.length) request.files = files;
   const result = await heygen(env, "/v3/video-agents", {
     method: "POST",
-    body: JSON.stringify({
-      prompt: videoPrompt(record.task, channel),
-      mode: "generate",
-      orientation: channel === "youtube" ? "landscape" : "portrait",
-      incognito_mode: true,
-    }),
+    body: JSON.stringify(request),
   });
   if (!result?.session_id)
     throw Object.assign(new Error("HeyGen 沒有回傳影片工作編號"), {
@@ -893,7 +1162,7 @@ async function hqAutoTask(env, config, slot, today) {
       result = await claude(
         env,
         base,
-        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。影片平台必須包含可直接製作的旁白、字幕與逐鏡分鏡。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"Reels或Shorts製作包","tiktok":"TikTok製作包","youtube":"YouTube完整製作包","line":"成品"}}；只保留要求的平台。`,
+        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。影片平台必須提供：逐字旁白、逐句字幕、時間碼、逐鏡分鏡，以及每一句旁白直接對應的情境畫面或圖解；不能整支只讓人物站著念稿。短影音使用六段式：0～3秒動態問題鉤子、人物提出問題、相關情境素材、時間軸或對照圖解、人物給具體解讀、最後行動引導。每3～5秒換一次有意義的畫面，人物約40%、相關素材約40%、文字圖解約20%。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"Reels或Shorts製作包","tiktok":"TikTok製作包","youtube":"YouTube完整製作包","line":"成品"}}；只保留要求的平台。`,
         2600,
       );
     try {
@@ -969,6 +1238,7 @@ async function hqScheduled(env, event) {
       if (
         slot === "afternoon" &&
         config.approvalMode === "auto" &&
+        config.autoVideoEnabled === true &&
         env.HEYGEN_API_KEY &&
         (await videoOwner(env, workspaceId, false))
       ) {
@@ -1047,6 +1317,18 @@ export default {
         return json(await hqTasks(env, b), 200, H);
       if (url.pathname === "/video-config")
         return json(await videoConfig(env, b), 200, H);
+      if (url.pathname === "/video-usage")
+        return json(await videoUsage(env, b), 200, H);
+      if (url.pathname === "/avatar-create")
+        return json(await avatarCreate(env, b), 200, H);
+      if (url.pathname === "/avatar-status")
+        return json(await avatarStatus(env, b), 200, H);
+      if (url.pathname === "/media-assets")
+        return json(await mediaAssets(env, b), 200, H);
+      if (url.pathname === "/voice-create")
+        return json(await voiceCreate(env, b), 200, H);
+      if (url.pathname === "/voice-status")
+        return json(await voiceStatus(env, b), 200, H);
       if (url.pathname === "/video-create")
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
