@@ -1,6 +1,14 @@
 name: Deploy Sales Team Worker
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - sales-team-worker.js
+      - hq-patch.js
+      - wrangler.jsonc
+      - .github/workflows/deploy-worker.yml
   workflow_dispatch:
     inputs:
       confirm:
@@ -17,7 +25,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ inputs.confirm == 'DEPLOY' }}
+    if: ${{ github.event_name == 'push' || inputs.confirm == 'DEPLOY' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
