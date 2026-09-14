@@ -247,7 +247,17 @@
       callAPI("/hq-config", { action: "list", workspaceId: workspaceId() }).catch(function () { return { config: null }; })
     ]).then(function (results) {
         var data = results[0], remote = Array.isArray(data.tasks) ? data.tasks : [];
-        restoreCloudConfig(results[1] && results[1].config);
+        var cloudConfig = results[1] && results[1].config;
+        if (!cloudConfig || !cloudConfig.product || !cloudConfig.product.name) {
+          var sourceTask = remote.find(function (task) { return task && task.product && task.product.name; });
+          if (sourceTask) cloudConfig = Object.assign({}, cloudConfig || {}, {
+            product: sourceTask.product,
+            presenter: sourceTask.presenter || (cloudConfig && cloudConfig.presenter),
+            production: sourceTask.production || (cloudConfig && cloudConfig.production),
+            approvalMode: sourceTask.approvalMode || (cloudConfig && cloudConfig.approvalMode)
+          });
+        }
+        restoreCloudConfig(cloudConfig);
         var merged = replaceLocal ? remote.slice() : read().concat(remote);
         var seen = {};
         merged = merged.sort(function (a, b) { return Number(b.updatedAt || b.createdAt) - Number(a.updatedAt || a.createdAt); })
