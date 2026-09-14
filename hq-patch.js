@@ -114,8 +114,8 @@
     return {
       brandStyle: saved.brandStyle || "依產品定位自動建立一致的品牌視覺",
       callToAction: saved.callToAction || "依內容提供一個自然、可執行的下一步",
-      totalSeconds: Math.max(15, Math.min(180, Number(saved.totalSeconds) || 45)),
-      presenterSeconds: Math.max(0, Math.min(30, Number(saved.presenterSeconds) || 12))
+      totalSeconds: Math.max(15, Math.min(35, Number(saved.totalSeconds) || 30)),
+      presenterSeconds: Math.max(0, Math.min(12, Number(saved.presenterSeconds) || 9))
     };
   }
   function currentProductionProfile() {
@@ -123,8 +123,8 @@
     var brand = document.getElementById("hqBrandStyle"), cta = document.getElementById("hqCTA"), total = document.getElementById("hqTotalSeconds"), presenter = document.getElementById("hqPresenterSeconds");
     if (brand) base.brandStyle = String(brand.value || base.brandStyle).trim().slice(0, 500);
     if (cta) base.callToAction = String(cta.value || base.callToAction).trim().slice(0, 500);
-    if (total) base.totalSeconds = Math.max(15, Math.min(180, Number(total.value) || base.totalSeconds));
-    if (presenter) base.presenterSeconds = Math.max(0, Math.min(30, Number(presenter.value) || base.presenterSeconds));
+    if (total) base.totalSeconds = Math.max(15, Math.min(35, Number(total.value) || base.totalSeconds));
+    if (presenter) base.presenterSeconds = Math.max(0, Math.min(12, Number(presenter.value) || base.presenterSeconds));
     base.presenterSeconds = Math.min(base.presenterSeconds, base.totalSeconds);
     return base;
   }
@@ -510,9 +510,9 @@
         '<div class="hq-field"><label>人物造型與場景</label><input id="hqAppearance" maxlength="500" placeholder="例：專業休閒服、明亮工作室、自然真實"></div>' +
         '<div class="hq-field wide"><label>品牌視覺</label><input id="hqBrandStyle" maxlength="500" placeholder="例：深藍金、可信任、簡潔圖解"></div>' +
         '<div class="hq-field wide"><label>影片行動引導</label><input id="hqCTA" maxlength="500" placeholder="例：留言關鍵字或前往產品頁"></div>' +
-        '<div class="hq-field"><label>影片總長（秒）</label><input id="hqTotalSeconds" type="number" min="15" max="180" value="45"></div>' +
-        '<div class="hq-field"><label>人物出鏡（秒）</label><input id="hqPresenterSeconds" type="number" min="0" max="30" value="12"></div>' +
-      '</div><div class="hq-configactions"><button class="hq-mini primary" id="hqSaveSetup" type="button">儲存目前設定</button><button class="hq-mini" id="hqManageProducts" type="button">新增／編輯產品</button><button class="hq-mini" id="hqNewPresenter" type="button">新增人物</button><button class="hq-mini hq-danger" id="hqDeletePresenter" type="button">刪除目前人物</button></div><div class="hq-note">設定會跟著本次任務保存；換產品或人物不會覆蓋其他組合。</div></section>' +
+        '<div class="hq-field"><label>影片總長（秒，最多 35）</label><input id="hqTotalSeconds" type="number" min="15" max="35" value="30"></div>' +
+        '<div class="hq-field"><label>人物出鏡（秒，最多 12）</label><input id="hqPresenterSeconds" type="number" min="0" max="12" value="9"></div>' +
+      '</div><div class="hq-configactions"><button class="hq-mini primary" id="hqSaveSetup" type="button">儲存目前設定</button><button class="hq-mini" id="hqManageProducts" type="button">新增／編輯產品</button><button class="hq-mini" id="hqNewPresenter" type="button">新增人物</button><button class="hq-mini hq-danger" id="hqDeletePresenter" type="button">刪除目前人物</button></div><div class="hq-note">影片固定不超過 35 秒；數字人只用在關鍵開場、觀點與收尾，其他段落交給情境畫面與圖解。</div></section>' +
       '<textarea id="hqGoal" placeholder="例：為目前選擇的產品製作 Threads、Facebook 與短影音內容"></textarea>' +
       '<div class="hq-compose"><strong>🗣️ 這次影片要怎麼產生內容？</strong>' +
         '<label class="hq-choice"><input type="radio" name="hqContentMode" value="auto" checked><span>AI 自動構建<small>你給主題，AI 自動安排觀點、腳本與畫面。</small></span></label>' +
@@ -836,6 +836,12 @@
     cliches.forEach(function (x) { if (all.indexOf(x) >= 0) flags.push("出現空泛句：" + x); });
     var otherBrands = (typeof getProds === "function" ? getProds() : []).map(function (p) { return p.p_name || ""; }).filter(function (x) { return x && (!task.product || x !== task.product.name); });
     otherBrands.forEach(function (x) { if (all.indexOf(x) >= 0) flags.push("疑似混入其他品牌：" + x); });
+    Object.keys(task.outputs || {}).filter(function (ch) { return ["video", "tiktok", "youtube"].indexOf(ch) >= 0; }).forEach(function (ch) {
+      var script = String(task.outputs[ch] || ""), timecodes = (script.match(/(?:^|\n|\s)(?:[0-2]?\d|3[0-5])\s*(?:秒|s|｜|\||-|～|—|:|：)/g) || []).length,
+        visualCues = (script.match(/畫面|鏡頭|情境|素材|圖解|字卡|對照|時間軸/g) || []).length;
+      if (timecodes < 6) flags.push("影片缺少至少 6 段、35 秒內的時間碼分鏡");
+      if (visualCues < 6) flags.push("影片缺少足夠的情境畫面與圖解安排");
+    });
     return { pass: flags.length === 0, flags: flags, summary: flags.length ? "已完成初檢，批准前請查看標記。" : "通過具體性、罐頭句與品牌混用初檢。" };
   }
 
@@ -896,7 +902,7 @@
         var ch = t.channels[i];
         updateTask(id, { state: "producing", currentChannel: ch }); render();
         var videoBrief = ["video", "tiktok", "youtube"].indexOf(ch) >= 0
-          ? "\n\n【本次影片設定】總長約 " + (t.production && t.production.totalSeconds || 45) + " 秒，人物出鏡合計約 " + (t.production && t.production.presenterSeconds || 12) + " 秒；品牌視覺：" + (t.production && t.production.brandStyle || "依產品定位") + "；行動引導：" + (t.production && t.production.callToAction || "提供自然的下一步") + "。\n【影音分鏡硬規則】提供逐字旁白、逐句字幕、時間碼與逐鏡畫面。不能整支人物站著念稿；每3～5秒換一次有意義的畫面。人物只負責關鍵開場、觀點或收尾，其餘使用與每句旁白直接相關的產品素材、操作畫面、情境 B-roll、圖表或動態字卡。"
+          ? "\n\n【本次影片設定】總長嚴禁超過 35 秒，本支為 " + Math.min(35, t.production && t.production.totalSeconds || 30) + " 秒；人物出鏡合計約 " + Math.min(12, t.production && t.production.presenterSeconds || 9) + " 秒；品牌視覺：" + (t.production && t.production.brandStyle || "依產品定位") + "；行動引導：" + (t.production && t.production.callToAction || "提供自然的下一步") + "。\n【固定七段分鏡】0–3 秒：問題鉤子大字卡；3–8 秒：人物提出具體觀點；8–14 秒：問題情境或產品素材；14–20 秒：時間軸、步驟或前後對照圖解；20–26 秒：第二個具體情境／證據；26–31 秒：人物給結論；31–35 秒：一句行動引導。\n【影音分鏡硬規則】每段都要交付時間碼、旁白、字幕與畫面說明。人物單一鏡位不得連續超過 6 秒；不能整支人物站著念稿。"
           : "";
         var result = await callAPI("/execute", {
           task: sourceBrief + "\n\n【內容策略】\n" + strategy + "\n\n【品質要求】具體、台灣口語、避免罐頭、提供可執行下一步。" + videoBrief,

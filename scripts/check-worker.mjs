@@ -76,10 +76,13 @@ assert.match(worker, /creatorProfileId/);
 assert.match(worker, /task\.presenter/);
 assert.doesNotMatch(worker, /品牌視覺：天衡深藍金/);
 assert.match(hq, /目前會建立 .* 支付費 MP4/);
+assert.match(hq, /影片固定不超過 35 秒/);
+assert.match(hq, /固定七段分鏡/);
 assert.match(hq, /允許排程自動使用付費產片/);
 assert.match(worker, /config\.autoVideoEnabled === true/);
 assert.match(worker, /request\.voice_id = voice\.id/);
 assert.match(worker, /request\.files = files/);
+assert.match(worker, /嚴禁超過35秒/);
 
 assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");

@@ -866,8 +866,8 @@ function videoPrompt(task, channel) {
           ? "TikTok 直式短影片"
           : "Reels／Shorts 直式短影片",
     production = task.production || {},
-    durationSeconds = Math.max(15, Math.min(180, Number(production.totalSeconds) || (channel === "youtube" ? 90 : 45))),
-    presenterSeconds = Math.max(0, Math.min(durationSeconds, Number(production.presenterSeconds) || 12)),
+    durationSeconds = Math.max(15, Math.min(35, Number(production.totalSeconds) || 30)),
+    presenterSeconds = Math.max(0, Math.min(durationSeconds, 12, Number(production.presenterSeconds) || 9)),
     presenterName = String(task.presenter?.name || "創作者").slice(0, 60),
     brandStyle = String(production.brandStyle || "依產品定位建立一致、清楚且可信任的品牌視覺").slice(0, 500),
     callToAction = String(production.callToAction || "提供一個自然且可執行的下一步").slice(0, 500);
@@ -884,9 +884,9 @@ function videoPrompt(task, channel) {
       : "沒有指定素材時，才由系統依旁白選擇相關情境畫面。",
     `品牌視覺：${brandStyle}。繁體中文字幕必須高對比、固定在手機安全區內，不得逐字漂移或超出畫面。`,
     "這不是單一人物念稿。每 3～5 秒必須有一次有意義的鏡頭或構圖變化；人物之外的時間，使用與當句旁白直接相關的產品素材、操作錄影、真實情境 B-roll、圖表與動態字卡。",
-    "固定六段式：①0～3秒問題鉤子動態字卡；②人物出場提出問題；③與該句旁白直接相關的情境畫面；④時間軸、步驟、對照或概念圖解；⑤人物回到畫面給具體解讀；⑥最後3～5秒以留言或私訊行動收尾。",
+    "固定七段式：①0～3秒問題鉤子動態字卡；②3～8秒人物提出具體問題；③8～14秒相關情境或產品素材；④14～20秒時間軸、步驟或前後對照；⑤20～26秒第二個具體情境或證據；⑥26～31秒人物回到畫面給結論；⑦31～35秒留言或私訊行動收尾。若總長低於35秒，等比例縮短，但不可刪除鉤子、情境、圖解、結論與收尾。",
     "每個畫面必須直接服務當下旁白語意；優先示範產品、問題情境、使用步驟、前後對照或具體證據。禁止無關素材、隨機漂浮方塊、空白畫面與長時間同一鏡位。",
-    "人物說話時使用中景或半身，情境段落可只保留旁白；加入柔和低音量背景音樂、少量轉場音效，不能蓋過人聲。",
+    "人物說話時使用中景或半身，單一人物鏡位不可連續超過6秒；情境段落只保留旁白；加入柔和低音量背景音樂、少量轉場音效，不能蓋過人聲。",
     `行動引導：${callToAction}。必須使用自然口吻、清楚字幕、前三秒有鉤子、畫面節奏明快；不得宣稱療效、保證獲利或成功。`,
     "以下是已通過內容產線的腳本與分鏡，請忠實製作，不要杜撰價格、數據或見證：",
     String(task.outputs?.[channel] || task.outputs?.video || "").slice(0, 7500),
@@ -1513,7 +1513,7 @@ async function hqAutoTask(env, config, slot, today) {
       result = await claude(
         env,
         base,
-        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。影片平台必須提供：逐字旁白、逐句字幕、時間碼、逐鏡分鏡，以及每一句旁白直接對應的情境畫面或圖解；不能整支只讓人物站著念稿。短影音使用六段式：0～3秒動態問題鉤子、人物提出問題、相關情境素材、時間軸或對照圖解、人物給具體解讀、最後行動引導。每3～5秒換一次有意義的畫面，人物約40%、相關素材約40%、文字圖解約20%。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"Reels或Shorts製作包","tiktok":"TikTok製作包","youtube":"YouTube完整製作包","line":"成品"}}；只保留要求的平台。`,
+        `今天是 ${today}。替「${productName}」完成 ${channels} 的今日內容包。內容必須像真人、具體、有第一步，不可罐頭。每一支影片嚴禁超過35秒，並必須提供：逐字旁白、逐句字幕、時間碼、逐鏡分鏡，以及每一句旁白直接對應的情境畫面或圖解；不能整支只讓人物站著念稿。固定七段：0～3秒動態問題鉤子、3～8秒人物提出問題、8～14秒相關情境素材、14～20秒時間軸或對照圖解、20～26秒第二個具體情境、26～31秒人物給結論、31～35秒行動引導。人物總出鏡約8～12秒，單一鏡位不超過6秒。只回 JSON：{"strategy":"一句策略","outputs":{"thread":"成品","fb":"成品","video":"Reels或Shorts製作包","tiktok":"TikTok製作包","youtube":"YouTube完整製作包","line":"成品"}}；只保留要求的平台。`,
         2600,
       );
     try {
