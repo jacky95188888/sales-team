@@ -42,16 +42,26 @@ jobs:
       - name: Require protected credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$YOUTUBE_CLIENT_ID"
+          test -n "$YOUTUBE_CLIENT_SECRET"
 
-      - name: Deploy Worker and preserve existing runtime Secrets
+      - name: Deploy Worker and sync YouTube publisher Secrets
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 22bd6a71b50e9eeaa0daa802615a3459
           wranglerVersion: "4"
           command: deploy --config wrangler.jsonc
+          secrets: |
+            YOUTUBE_CLIENT_ID
+            YOUTUBE_CLIENT_SECRET
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
 
       - name: Verify public Worker endpoint
         run: |
