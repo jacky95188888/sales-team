@@ -472,8 +472,9 @@ async function hqConfig(env, b) {
 }
 async function hqTasks(env, b) {
   if (!env.MONITOR) return { error: "尚未綁定 MONITOR KV" };
-  const id = hqWorkspaceId(b.workspaceId),
-    key = "hq:tasks:" + id,
+  const id = hqWorkspaceId(b.workspaceId);
+  if (await workspaceMigrationMatch(id)) await videoOwner(env, id, true);
+  const key = "hq:tasks:" + id,
     tasks = JSON.parse((await env.MONITOR.get(key)) || "[]");
   if ((b.action || "list") === "list") return { tasks };
 
