@@ -21,6 +21,7 @@
     tiktok: { credentialsReady: false, connected: false, account: null, privacyOptions: [] }
   };
   var videoPollers = {};
+  var videoStarts = {};
   var avatarPoller = null;
   var voicePoller = null;
   var mediaRecorder = null;
@@ -152,6 +153,16 @@
       reviewing: "AI 品質審核中", revising: "內容員自動修改中", approval: "腳本等待你批准", video_review: "影片成品待你驗收", returned: "退回修改",
       scheduled: "已批准・等待發布", done: "已完成", failed: "需要處理"
     }[s] || s;
+  }
+  function displayStateLabel(t) {
+    if (t.state !== "scheduled") return stateLabel(t.state);
+    var videoChannels = (t.channels || []).filter(function (ch) { return ["video", "tiktok", "youtube"].indexOf(ch) >= 0; });
+    if (!videoChannels.length) return "等待你手動貼出";
+    var jobs = t.videoJobs || {}, finished = videoChannels.every(function (ch) { return jobs[ch] && jobs[ch].status === "completed"; });
+    if (finished) return t.finalApprovedAt ? "已驗收・等待發布" : "成品待驗收";
+    if (videoChannels.some(function (ch) { return jobs[ch] && jobs[ch].status === "failed"; })) return "產片失敗・需處理";
+    if (!videoChannels.some(function (ch) { return jobs[ch]; })) return "已批准・尚未產片";
+    return "已批准・產片中";
   }
   function findTask(id) { return read().find(function (x) { return x.id === id; }); }
   function updateTask(id, patch) {
@@ -441,7 +452,9 @@
   }
   function checkVideoConfig() {
     if (typeof callAPI !== "function") return Promise.resolve();
-    return callAPI("/video-config", { workspaceId: workspaceId(), profileId: activePresenterId() }).then(function (data) {
+    var requestedPresenter = activePresenterId(), requestedWorkspace = workspaceId();
+    return callAPI("/video-config", { workspaceId: requestedWorkspace, profileId: requestedPresenter }).then(function (data) {
+      if (requestedPresenter !== activePresenterId() || requestedWorkspace !== workspaceId()) return;
       videoConfigState = data || videoConfigState;
       var el = document.getElementById("hqVideoState");
       if (el) el.textContent = videoStateText();
@@ -451,7 +464,12 @@
       if (data.avatar && ["building_face", "building_style"].indexOf(data.avatar.status) >= 0)
         scheduleAvatarPoll();
       render();
-    }).catch(function () {});
+    }).catch(function () {
+      if (requestedPresenter !== activePresenterId() || requestedWorkspace !== workspaceId()) return;
+      videoConfigState.ready = false;
+      var el = document.getElementById("hqVideoState");
+      if (el) el.textContent = "無法取得人物／影片設定，請稍後重新整理；尚未確認是否可產片。";
+    });
   }
 
   function addStyles() {
@@ -484,7 +502,8 @@
       .hq-cloud{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding:9px 10px;border-radius:11px;background:rgba(20,13,38,.5);border:1px solid rgba(145,215,180,.24);font-size:.7rem;color:#91d7b4}.hq-cloud button{border:1px solid rgba(169,139,216,.45);border-radius:8px;background:#2c1f4d;color:var(--ink);padding:5px 8px;font-size:.66rem}.hq-syncbox{display:none;margin-top:8px}.hq-syncbox.on{display:flex;gap:6px}.hq-syncbox input{min-width:0;flex:1;margin:0;padding:8px;font-size:.72rem}.hq-syncbox button{margin:0;width:auto;padding:8px 10px}
       .hq-config{margin:0 0 12px;padding:11px;border:1px solid rgba(232,194,103,.3);border-radius:12px;background:rgba(20,13,38,.42)}.hq-config h3{color:var(--gold-lt);font-size:.82rem;margin:0 0 9px}.hq-configgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hq-field{min-width:0}.hq-field.wide{grid-column:1/-1}.hq-field label{display:block;font-size:.64rem;color:var(--ink-soft);margin-bottom:4px}.hq-field input,.hq-field select,.hq-field textarea{width:100%;min-width:0;margin:0;padding:9px;border-radius:9px;border:1px solid rgba(169,139,216,.28);background:rgba(12,8,25,.65);color:var(--ink);font-size:.72rem;box-sizing:border-box}.hq-field textarea{min-height:64px}.hq-configactions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
       @media(max-width:420px){.hq-focus{align-items:flex-start;flex-wrap:wrap}.hq-focusbody{width:calc(100% - 64px)}.hq-focus button{width:100%;margin-left:62px}.hq-head{display:block}.hq-live{display:inline-block;margin-top:7px}}
-      @media(max-width:420px){.hq-configgrid{grid-template-columns:1fr}.hq-field.wide{grid-column:auto}}
+      .hq-config summary{cursor:pointer;color:var(--gold-lt);font-size:.82rem;font-weight:800;list-style-position:inside}.hq-config[open] summary{margin-bottom:10px}.hq-prose{font-size:.74rem;line-height:1.75;color:var(--ink);white-space:normal;overflow-wrap:anywhere}.hq-prose h3,.hq-prose h4,.hq-prose h5{margin:13px 0 6px;color:var(--gold-lt);font-size:.86rem}.hq-prose hr{border:0;border-top:1px solid rgba(255,255,255,.14);margin:12px 0}.hq-tableline{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0}.hq-tableline span{padding:3px 6px;border-radius:6px;background:rgba(255,255,255,.06);font-size:.67rem}
+      @media(max-width:420px){.hq-configgrid{grid-template-columns:1fr}.hq-field.wide{grid-column:auto}.hq-focus button{width:100%;max-width:100%;margin-left:0;box-sizing:border-box}}
       @media(max-width:420px){.hq-publishselects{grid-template-columns:1fr}}
       @media(max-width:360px){.hq-points{grid-template-columns:1fr}.hq-channels{grid-template-columns:1fr}}
     `;
@@ -503,7 +522,7 @@
     '<div id="hqActiveNow"></div>' +
     '<div class="panel"><div class="hq-titleline"><label class="lbl">👑 等待老闆批准</label><span class="hq-count" id="hqApprovalCount">0 件</span></div><div id="hqApprovals"></div></div>' +
     '<div class="panel"><label class="lbl">➕ 交辦新任務</label>' +
-      '<section class="hq-config"><h3>🧰 本次製作設定</h3><div class="hq-configgrid">' +
+      '<details class="hq-config"><summary>🧰 本次製作設定（產品、人物、影片規格）</summary><div class="hq-configgrid">' +
         '<div class="hq-field"><label>使用產品</label><select id="hqProductSelect"></select></div>' +
         '<div class="hq-field"><label>出鏡人物／聲音</label><select id="hqPresenterSelect"></select></div>' +
         '<div class="hq-field"><label>人物名稱</label><input id="hqPresenterName" maxlength="60" placeholder="例：王小明／品牌顧問"></div>' +
@@ -512,7 +531,7 @@
         '<div class="hq-field wide"><label>影片行動引導</label><input id="hqCTA" maxlength="500" placeholder="例：留言關鍵字或前往產品頁"></div>' +
         '<div class="hq-field"><label>影片總長（秒，最多 35）</label><input id="hqTotalSeconds" type="number" min="15" max="35" value="30"></div>' +
         '<div class="hq-field"><label>人物出鏡（秒，最多 12）</label><input id="hqPresenterSeconds" type="number" min="0" max="12" value="9"></div>' +
-      '</div><div class="hq-configactions"><button class="hq-mini primary" id="hqSaveSetup" type="button">儲存目前設定</button><button class="hq-mini" id="hqManageProducts" type="button">新增／編輯產品</button><button class="hq-mini" id="hqNewPresenter" type="button">新增人物</button><button class="hq-mini hq-danger" id="hqDeletePresenter" type="button">刪除目前人物</button></div><div class="hq-note">影片固定不超過 35 秒；數字人只用在關鍵開場、觀點與收尾，其他段落交給情境畫面與圖解。</div></section>' +
+      '</div><div class="hq-configactions"><button class="hq-mini primary" id="hqSaveSetup" type="button">儲存目前設定</button><button class="hq-mini" id="hqManageProducts" type="button">新增／編輯產品</button><button class="hq-mini" id="hqNewPresenter" type="button">新增人物</button><button class="hq-mini hq-danger" id="hqDeletePresenter" type="button">刪除目前人物</button></div><div class="hq-note">影片固定不超過 35 秒；數字人只用在關鍵開場、觀點與收尾，其他段落交給情境畫面與圖解。</div></details>' +
       '<textarea id="hqGoal" placeholder="例：為目前選擇的產品製作 Threads、Facebook 與短影音內容"></textarea>' +
       '<div class="hq-compose"><strong>🗣️ 這次影片要怎麼產生內容？</strong>' +
         '<label class="hq-choice"><input type="radio" name="hqContentMode" value="auto" checked><span>AI 自動構建<small>你給主題，AI 自動安排觀點、腳本與畫面。</small></span></label>' +
@@ -602,6 +621,8 @@
       if (finished) stage = { step: 7, who: 2, done: [0,1,3,4], work: "陳沁柔已整理通過的影片與發布文案，目前等待你發布", next: "尚未執行任何對外發布動作" };
       else if (failed) stage = { step: 6, who: 4, done: [0,1,2,3], work: "江星瑤產生 MP4 時遇到問題，等待重新產片", next: "查看錯誤訊息後再重新執行，不會自動發布" };
       else if (!videoChannels.length) stage = { step: 7, who: 2, done: [0,1,3], work: "陳沁柔已整理完成內容，目前等待你手動發布", next: "尚未執行任何對外發布動作" };
+      else if (!videoChannels.some(function (ch) { return jobs[ch]; })) stage = { step: 6, who: 4, done: [0,1,2,3], work: "腳本已批准，但影片工作尚未啟動", next: "確認此任務的人物設定後，再按產生 MP4" };
+      if (finished && !t.finalApprovedAt) stage = { step: 7, who: 3, done: [0,1,2,4], work: "MP4 已完成，等待你播放驗收", next: "驗收批准後才能發布" };
     }
     return stage;
   }
@@ -615,9 +636,18 @@
         (src ? '<img src="' + E(src) + '" alt="' + E(person.name) + '" onerror="this.style.display=\'none\'">' : '<span>' + E(["👩‍💼","💁‍♀️","🙋‍♀️","👩‍🎤","👩‍🏫"][index]) + '</span>') +
         '</div><div class="hq-personname">' + E(person.name) + '</div></div>';
     }).join("");
-    return '<div class="hq-now"><div class="hq-nowtop"><span class="hq-nowstep">目前第 ' + stage.step + '／7 步</span><span class="hq-state ' + E(t.state) + '">' + E(stateLabel(t.state)) + '</span></div>' +
+    return '<div class="hq-now"><div class="hq-nowtop"><span class="hq-nowstep">目前第 ' + stage.step + '／7 步</span><span class="hq-state ' + E(t.state) + '">' + E(displayStateLabel(t)) + '</span></div>' +
       '<div class="hq-nowwork">' + E(stage.work) + '</div><div class="hq-next">' + E(stage.next) + '</div><div class="hq-crew">' + crew + '</div>' +
       '<div class="hq-phasebar">' + [1,2,3,4,5,6,7].map(function (i) { return '<i class="' + (i < stage.step ? 'done' : (i === stage.step ? 'active' : '')) + '"></i>'; }).join("") + '</div></div>';
+  }
+  function richOutput(text) {
+    var html = E(String(text || ""));
+    html = html.replace(/^###\s+(.+)$/gm, '<h5>$1</h5>').replace(/^##\s+(.+)$/gm, '<h4>$1</h4>')
+      .replace(/^#\s+(.+)$/gm, '<h3>$1</h3>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/^---$/gm, '<hr>').replace(/^\|(.+)\|$/gm, function (_, row) {
+        return '<div class="hq-tableline">' + row.split('|').filter(Boolean).map(function (cell) { return '<span>' + cell.trim() + '</span>'; }).join('') + '</div>';
+      }).replace(/\n/g, '<br>');
+    return '<div class="hq-prose">' + html + '</div>';
   }
   function outputHtml(t) {
     if (!t.outputs) return "";
@@ -634,7 +664,7 @@
           (job.videoUrl ? '<video controls preload="metadata" poster="' + E(job.thumbnailUrl || "") + '" src="' + E(job.captionedVideoUrl || job.videoUrl) + '"></video><a href="' + E(job.captionedVideoUrl || job.videoUrl) + '" target="_blank" rel="noopener">⬇️ 開啟／下載 MP4</a>' : '') +
           (job.subtitleUrl ? '　<a href="' + E(job.subtitleUrl) + '" target="_blank" rel="noopener">下載字幕</a>' : '') + '</div>';
       }
-      return '<details class="hq-output"' + (["approval", "video_review"].indexOf(t.state) >= 0 ? " open" : "") + '><summary>' + E(item ? item.label : (special[ch] || ch)) + '</summary><pre>' + E(t.outputs[ch]) + '</pre>' +
+      return '<details class="hq-output"' + (["approval", "video_review"].indexOf(t.state) >= 0 ? " open" : "") + '><summary>' + E(item ? item.label : (special[ch] || ch)) + '</summary>' + richOutput(t.outputs[ch]) +
         (isVideo ? '<div class="hq-videoengine"><b>影片製作包：</b>腳本、旁白、字幕、分鏡已完成。<br><b>MP4：</b>' + E(job ? (job.status === "completed" ? "已完成，可預覽或下載。" : "正在 HeyGen 產生中。") : (videoConfigState.ready ? "批准後即可按鈕產生。" : "HeyGen API 尚未啟用。")) + '</div>' + videoBox : '') +
         '<button class="copy" data-hq-copy="' + E(t.id) + '" data-hq-copych="' + E(ch) + '">📋 複製</button></details>';
     }).join("");
@@ -700,7 +730,13 @@
         if (completedVideoForPublisher(t, "youtube")) publishButtons += publishActionButton(t, "youtube");
         if (channels.indexOf("tiktok") >= 0) publishButtons += publishActionButton(t, "tiktok");
       }
-      return '<div class="hq-minirow">' + platformButtons + publishButtons + '<button class="hq-mini" data-hq-done="' + E(t.id) + '">手動發布後標記完成</button></div><div class="hq-actionnote">真正發布按鈕只會在成品批准後出現；手動標記不會替你上傳內容。</div>';
+      var videoChannels = channels.filter(function (ch) { return ["video", "tiktok", "youtube"].indexOf(ch) >= 0; });
+      var allVideosDone = videoChannels.length && videoChannels.every(function (ch) { return t.videoJobs && t.videoJobs[ch] && t.videoJobs[ch].status === "completed"; });
+      if (allVideosDone && !t.finalApprovedAt) publishButtons += '<button class="hq-mini primary" data-hq-finalapprove="' + E(t.id) + '">批准成品・等待發布</button>';
+      var archiveButton = !videoChannels.length
+        ? '<button class="hq-mini" data-hq-done="' + E(t.id) + '">我已手動貼出內容・歸檔</button>'
+        : (allVideosDone ? '<button class="hq-mini" data-hq-done="' + E(t.id) + '">我已自行發布影片・歸檔</button>' : '');
+      return '<div class="hq-minirow">' + platformButtons + publishButtons + archiveButton + '</div><div class="hq-actionnote">產片中不可歸檔。真正發布按鈕只會在成品驗收後出現；歸檔不會替你上傳內容。</div>';
     }
     if (t.state === "done" && completedVideoForPublisher(t, "youtube")) {
       if (t.finalApprovedAt)
@@ -711,9 +747,9 @@
   }
   function taskHtml(t) {
     var source = t.contentMode === "statement" ? "本人陳述" : "AI 自動構建", materialCount = Array.isArray(t.assets) ? t.assets.length : 0;
-    return '<article class="hq-task" id="hq-task-' + E(t.id) + '"><div class="hq-tasktop"><div><h3>' + E(t.goal) + '</h3><div class="hq-meta">📦 ' + E(t.product ? t.product.name : "未設定產品") + '　·　' + E(nowText(t.updatedAt || t.createdAt)) + '</div></div><span class="hq-state ' + E(t.state) + '">' + E(stateLabel(t.state)) + '</span></div>' +
+    return '<article class="hq-task" id="hq-task-' + E(t.id) + '"><div class="hq-tasktop"><div><h3>' + E(t.goal) + '</h3><div class="hq-meta">📦 ' + E(t.product ? t.product.name : "未設定產品") + '　·　' + E(nowText(t.updatedAt || t.createdAt)) + '</div></div><span class="hq-state ' + E(t.state) + '">' + E(displayStateLabel(t)) + '</span></div>' +
       '<div class="hq-meta">👤 ' + E(t.presenter && t.presenter.name ? t.presenter.name : "預設人物") + '　・　🎙️ ' + E(source) + (materialCount ? '　・　🖼️ ' + materialCount + ' 個指定素材' : '') + '</div><div class="hq-meta">👥 ' + E((t.employees || ["市場策略員", "內容創作員", "品質主管"]).join("・")) + '</div>' + taskCrewHtml(t) +
-      (t.error ? '<div class="hq-error">' + E(t.error) + '</div>' : '') + qualityHtml(t) + outputHtml(t) + buttonsHtml(t) + '</article>';
+      (t.error ? '<div class="hq-error">' + E(t.error) + '</div>' : '') + qualityHtml(t) + buttonsHtml(t) + outputHtml(t) + '</article>';
   }
 
   function activeFocusHtml(t) {
@@ -861,13 +897,15 @@
         hqTaskId: task.id,
         productSnapshot: task.product
       });
-      var flags = [];
+      var local = localQuality(Object.assign({}, task, { outputs: outputs }));
+      var flags = local.flags.slice();
       if (review.issues) flags.push(String(review.issues));
+      var passed = !!review.pass && local.pass;
       return {
-        pass: !!review.pass,
+        pass: passed,
         flags: flags,
         fix: String(review.fix || ""),
-        summary: review.pass ? "AI 品質主管審核通過，可送老闆批准。" : "AI 品質主管已退回，內容員正在依意見修改。"
+        summary: passed ? "AI 與本機品質檢查通過，可送老闆批准。" : "品質檢查未通過，內容員正在依意見修改。"
       };
     } catch (_) {
       var fallback = localQuality(Object.assign({}, task, { outputs: outputs }));
@@ -936,7 +974,7 @@
         if (!quality.pass) quality.summary = "已自動修改一次，仍有注意事項，交由老闆最後判斷。";
       }
 
-      var nextState = t.approvalMode === "auto" && t.autoVideoEnabled === true ? "scheduled" : "approval";
+      var nextState = quality.pass && t.approvalMode === "auto" && t.autoVideoEnabled === true ? "scheduled" : "approval";
       updateTask(id, { state: nextState, outputs: outputs, quality: quality });
       if (nextState === "scheduled") startApprovedVideos(id, true);
     } catch (err) {
@@ -1013,7 +1051,7 @@
     var patch = { videoJobs: jobs };
     var expectedVideos = (task.channels || []).filter(function (ch) { return ["video", "tiktok", "youtube"].indexOf(ch) >= 0; });
     var allVideosReady = expectedVideos.length && expectedVideos.every(function (ch) { return jobs[ch] && jobs[ch].status === "completed"; });
-    if (allVideosReady && task.approvalMode !== "auto") patch.state = "video_review";
+    if (allVideosReady && task.approvalMode !== "auto" && !task.finalApprovedAt && task.state !== "done") patch.state = "video_review";
     if (syncRemote === false) {
       var rows = read(), index = rows.findIndex(function (x) { return x.id === taskId; });
       if (index >= 0) { rows[index] = Object.assign({}, rows[index], patch, { updatedAt: Date.now() }); write(rows); }
@@ -1091,7 +1129,19 @@
     }, 15000);
   }
   async function startVideo(taskId, channel, quiet) {
+    var lockKey = taskId + ':' + channel;
+    if (videoStarts[lockKey]) return;
+    videoStarts[lockKey] = true;
+    try { await startVideoOnce(taskId, channel, quiet); }
+    finally { delete videoStarts[lockKey]; }
+  }
+  async function startVideoOnce(taskId, channel, quiet) {
     var task = findTask(taskId); if (!task) return;
+    var existing = task.videoJobs && task.videoJobs[channel];
+    if (existing && existing.status === "completed") return;
+    if (existing && existing.sessionId && ["thinking", "generating", "pending", "processing"].indexOf(existing.status) >= 0) {
+      await pollVideo(taskId, channel, quiet); return;
+    }
     var taskConfig;
     try { taskConfig = await videoAPI("/video-config", { workspaceId: workspaceId(), profileId: task.presenter && task.presenter.id || "default" }); }
     catch (err) { if (!quiet) alert(String(err && err.message ? err.message : err)); return; }
@@ -1208,7 +1258,7 @@
         syncConfig();
       });
     });
-    document.getElementById("p_hq").addEventListener("click", function (ev) {
+    document.getElementById("p_hq").addEventListener("click", async function (ev) {
       var b = ev.target.closest("button"); if (!b) return;
       if (b.dataset.hqFocus) {
         var target = document.getElementById(b.dataset.hqFocus);
@@ -1217,6 +1267,12 @@
       if (b.dataset.hqRun) runPipeline(b.dataset.hqRun);
       if (b.dataset.hqApprove) {
         var approvedTask = findTask(b.dataset.hqApprove), paidCount = selectedVideoChannels(approvedTask).length;
+        if (paidCount) {
+          try {
+            var approvalConfig = await videoAPI("/video-config", { workspaceId: workspaceId(), profileId: approvedTask.presenter && approvedTask.presenter.id || "default" });
+            if (!approvalConfig.ready) { alert("目前人物尚未完成 HeyGen 人物／影片設定，先完成設定後才能批准付費產片。腳本與分鏡會保留，不會扣費。"); return; }
+          } catch (err) { alert("暫時無法確認 HeyGen 設定：" + String(err && err.message ? err.message : err)); return; }
+        }
         if (paidCount && !confirm("這次會送出 " + paidCount + " 個 HeyGen 付費產片工作。確定開始嗎？")) return;
         updateTask(b.dataset.hqApprove, { state: "scheduled", approvedAt: Date.now() }); render(); startApprovedVideos(b.dataset.hqApprove, false);
       }
