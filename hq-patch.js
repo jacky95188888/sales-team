@@ -258,13 +258,27 @@
           });
         }
         restoreCloudConfig(cloudConfig);
+        remote.slice().reverse().forEach(function (task) {
+          if (!task || (!task.product && !task.presenter && !task.production)) return;
+          restoreCloudConfig({
+            product: task.product || {},
+            presenter: task.presenter || null,
+            production: task.production || {},
+            approvalMode: task.approvalMode || ""
+          });
+        });
+        var preferredPresenter = remote.find(function (task) { return task && task.presenter && task.presenter.id && task.presenter.id !== "default"; })
+          || remote.find(function (task) { return task && task.presenter && task.presenter.id; });
+        if (preferredPresenter) {
+          try { localStorage.setItem(ACTIVE_PRESENTER_KEY, preferredPresenter.presenter.id); } catch (_) {}
+        }
         var merged = replaceLocal ? remote.slice() : read().concat(remote);
         var seen = {};
         merged = merged.sort(function (a, b) { return Number(b.updatedAt || b.createdAt) - Number(a.updatedAt || a.createdAt); })
           .filter(function (x) { if (!x || !x.id || seen[x.id]) return false; seen[x.id] = true; return true; });
         write(merged);
         cloudState("☁️ 雲端同步完成・" + remote.length + " 件任務");
-        render(); checkVideoConfig(); checkPublishConfig(false);
+        render(); renderConfigurator(); checkVideoConfig(); checkPublishConfig(false);
       }).catch(function () {
         cloudState("⚠️ 雲端讀取失敗，目前使用本機任務", true);
       }).finally(function () { cloudBusy = false; });
