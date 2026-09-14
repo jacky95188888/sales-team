@@ -658,6 +658,14 @@
       return '<button class="hq-mini" disabled>' + icon + ' 請先連接 ' + label + '</button>';
     return '<button class="hq-mini primary" data-hq-publish="' + E(t.id) + '" data-hq-provider="' + provider + '">' + icon + ' 發布到 ' + label + '</button>' + (job && job.failure ? '<div class="hq-publishjob failed">' + E(job.failure) + '</div>' : '');
   }
+  function completedVideoForPublisher(t, provider) {
+    var jobs = t.videoJobs || {};
+    if (jobs[provider] && jobs[provider].status === "completed" && jobs[provider].videoUrl) return jobs[provider];
+    // Older Reels／Shorts tasks produce a normal landscape MP4 under "video".
+    // That file is safe to reuse for YouTube after the owner explicitly approves it.
+    if (provider === "youtube" && jobs.video && jobs.video.status === "completed" && jobs.video.videoUrl) return jobs.video;
+    return null;
+  }
   function qualityHtml(t) {
     if (!t.quality) return "";
     var q = t.quality;
@@ -689,10 +697,15 @@
       if (channels.indexOf("video") >= 0) platformButtons += videoActionButton(t, "video", "◎", "Reels／Shorts");
       var publishButtons = '';
       if (t.finalApprovedAt) {
-        if (channels.indexOf("youtube") >= 0) publishButtons += publishActionButton(t, "youtube");
+        if (completedVideoForPublisher(t, "youtube")) publishButtons += publishActionButton(t, "youtube");
         if (channels.indexOf("tiktok") >= 0) publishButtons += publishActionButton(t, "tiktok");
       }
       return '<div class="hq-minirow">' + platformButtons + publishButtons + '<button class="hq-mini" data-hq-done="' + E(t.id) + '">手動發布後標記完成</button></div><div class="hq-actionnote">真正發布按鈕只會在成品批准後出現；手動標記不會替你上傳內容。</div>';
+    }
+    if (t.state === "done" && completedVideoForPublisher(t, "youtube")) {
+      if (t.finalApprovedAt)
+        return '<div class="hq-minirow">' + publishActionButton(t, "youtube") + '</div><div class="hq-actionnote">此成品已完成，仍可由你決定是否補做 YouTube 發布。</div>';
+      return '<div class="hq-minirow"><button class="hq-mini primary" data-hq-recoverpublish="' + E(t.id) + '">我已驗收成品・啟用 YouTube 發布</button></div><div class="hq-actionnote">這只會把既有 MP4 轉為待發布，不會立即上傳。</div>';
     }
     return "";
   }
@@ -1202,6 +1215,10 @@
         updateTask(b.dataset.hqApprove, { state: "scheduled", approvedAt: Date.now() }); render(); startApprovedVideos(b.dataset.hqApprove, false);
       }
       if (b.dataset.hqFinalapprove) { updateTask(b.dataset.hqFinalapprove, { state: "scheduled", finalApprovedAt: Date.now() }); render(); }
+      if (b.dataset.hqRecoverpublish) {
+        if (!confirm("確定這支既有 MP4 已驗收，可以開啟 YouTube 發布嗎？\n這一步不會上傳影片。")) return;
+        updateTask(b.dataset.hqRecoverpublish, { state: "scheduled", finalApprovedAt: Date.now(), recoveredForPublishingAt: Date.now() }); render();
+      }
       if (b.dataset.hqReturn) { updateTask(b.dataset.hqReturn, { state: "returned", returnNote: "請加強相關情境畫面、鏡頭變化與真人口吻。", videoJobs: {} }); render(); }
       if (b.dataset.hqDone) { var completed = findTask(b.dataset.hqDone); updateTask(b.dataset.hqDone, { state: "done", publishedAt: Date.now() }); cleanupOnceAssets(completed); render(); }
       if (b.dataset.hqVideo) startVideo(b.dataset.hqVideo, b.dataset.hqVideoch);

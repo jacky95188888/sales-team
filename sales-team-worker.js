@@ -1336,7 +1336,9 @@ async function publishVideo(env, b) {
   const record = await hqTaskForVideo(env, b.workspaceId, b.taskId), task = record.task;
   if (!task.finalApprovedAt && task.approvalMode !== "auto")
     throw Object.assign(new Error("請先播放並批准影片成品"), { status: 409 });
-  const videoJob = task.videoJobs?.[channel];
+  // Existing Reels／Shorts tasks store their completed landscape file as "video".
+  // Permit the owner-approved file to be published to YouTube without producing it again.
+  const videoJob = task.videoJobs?.[channel] || (provider === "youtube" ? task.videoJobs?.video : null);
   if (videoJob?.status !== "completed" || !videoJob.videoUrl)
     throw Object.assign(new Error("這個平台的 MP4 尚未完成"), { status: 409 });
   let token = await getPublisher(env, record.id, provider);
@@ -1346,7 +1348,7 @@ async function publishVideo(env, b) {
     throw Object.assign(new Error("YouTube 可見度不正確"), { status: 400 });
   if (provider === "tiktok" && !privacy)
     throw Object.assign(new Error("請先選擇 TikTok 可見度"), { status: 400 });
-  const metadata = { title: String(task.goal || "顧問團影片").slice(0, 100), description: String(task.outputs?.[channel] || task.goal || "").slice(0, provider === "youtube" ? 5000 : 2200), privacy };
+  const metadata = { title: String(task.goal || "顧問團影片").slice(0, 100), description: String(task.outputs?.[channel] || task.outputs?.video || task.goal || "").slice(0, provider === "youtube" ? 5000 : 2200), privacy };
   const pending = { provider, status: "uploading", privacy, startedAt: Date.now() };
   await savePublishJob(env, record, provider, pending);
   try {
