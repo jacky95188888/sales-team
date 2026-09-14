@@ -220,19 +220,41 @@
       cloudState("⚠️ 自動營運設定尚未同步", true);
     });
   }
+  function restoreCloudConfig(config) {
+    if (!config || typeof config !== "object") return;
+    var product = config.product || {}, name = String(product.name || "").trim();
+    if (name) {
+      var row = { p_name: name, p_feat: String(product.feature || ""), p_price: String(product.price || ""), p_audience: String(product.audience || ""), p_industry: String(product.industry || ""), p_contact: String(product.contact || ""), p_url: String(product.url || "") };
+      var products = readJson("advisor_products", []).filter(function (x) { return x && x.p_name !== name; });
+      products.unshift(row);
+      try { localStorage.setItem("advisor_products", JSON.stringify(products.slice(0, 30))); localStorage.setItem("advisor_current_product", "0"); } catch (_) {}
+      var all = readJson(PRODUCTION_KEY, {});
+      all[productKey(row)] = config.production || all[productKey(row)] || {};
+      try { localStorage.setItem(PRODUCTION_KEY, JSON.stringify(all)); } catch (_) {}
+    }
+    if (config.presenter && config.presenter.id) {
+      var people = readJson(PRESENTERS_KEY, []).filter(function (x) { return x && x.id !== config.presenter.id; });
+      people.unshift(config.presenter);
+      try { localStorage.setItem(PRESENTERS_KEY, JSON.stringify(people.slice(0, 20))); localStorage.setItem(ACTIVE_PRESENTER_KEY, config.presenter.id); } catch (_) {}
+    }
+    if (config.approvalMode) saveApprovalMode(config.approvalMode);
+  }
   function remoteHydrate(replaceLocal) {
     if (cloudBusy || typeof callAPI !== "function") return Promise.resolve();
     cloudBusy = true;
-    return callAPI("/hq-tasks", { action: "list", workspaceId: workspaceId() })
-      .then(function (data) {
-        var remote = Array.isArray(data.tasks) ? data.tasks : [];
+    return Promise.all([
+      callAPI("/hq-tasks", { action: "list", workspaceId: workspaceId() }),
+      callAPI("/hq-config", { action: "list", workspaceId: workspaceId() }).catch(function () { return { config: null }; })
+    ]).then(function (results) {
+        var data = results[0], remote = Array.isArray(data.tasks) ? data.tasks : [];
+        restoreCloudConfig(results[1] && results[1].config);
         var merged = replaceLocal ? remote.slice() : read().concat(remote);
         var seen = {};
         merged = merged.sort(function (a, b) { return Number(b.updatedAt || b.createdAt) - Number(a.updatedAt || a.createdAt); })
           .filter(function (x) { if (!x || !x.id || seen[x.id]) return false; seen[x.id] = true; return true; });
         write(merged);
         cloudState("☁️ 雲端同步完成・" + remote.length + " 件任務");
-        render();
+        render(); checkVideoConfig(); checkPublishConfig(false);
       }).catch(function () {
         cloudState("⚠️ 雲端讀取失敗，目前使用本機任務", true);
       }).finally(function () { cloudBusy = false; });
