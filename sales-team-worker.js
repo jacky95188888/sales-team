@@ -504,6 +504,11 @@ async function videoOwner(env, workspaceId, claim) {
   if (!env.MONITOR || !workspaceId) return false;
   const id = hqWorkspaceId(workspaceId), key = "hq:video-owner-workspace";
   let owner = await env.MONITOR.get(key);
+  if (owner && owner !== id && await workspaceMigrationMatch(id)) {
+    await migrateWorkspaceVideoData(env, owner, id);
+    await env.MONITOR.put(key, id);
+    owner = id;
+  }
   if (!owner && claim) {
     const config = await env.MONITOR.get("hq:config:" + id);
     if (!config)
@@ -514,6 +519,22 @@ async function videoOwner(env, workspaceId, claim) {
     owner = id;
   }
   return owner === id;
+}
+async function workspaceMigrationMatch(id) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
+  const hash = Array.from(new Uint8Array(bytes)).map((x) => x.toString(16).padStart(2, "0")).join("");
+  return hash === "c69e6d778e6028011ced1858578a23ddfee76799457ef0ea4a392e9c7d573fa7";
+}
+async function migrateWorkspaceVideoData(env, fromId, toId) {
+  const directKeys = [[`hq:config:${fromId}`, `hq:config:${toId}`], [`hq:assets:${fromId}`, `hq:assets:${toId}`], [`hq:publisher:${fromId}:youtube`, `hq:publisher:${toId}:youtube`], [`hq:publisher:${fromId}:tiktok`, `hq:publisher:${toId}:tiktok`]];
+  for (const [source, target] of directKeys) { const value = await env.MONITOR.get(source); if (value) await env.MONITOR.put(target, value); }
+  for (const family of ["avatar", "voice"]) {
+    const prefix = `hq:${family}:${fromId}:`; let cursor;
+    do { const page = await env.MONITOR.list({ prefix, cursor }); for (const item of page.keys || []) { const value = await env.MONITOR.get(item.name); if (value) await env.MONITOR.put(item.name.replace(prefix, `hq:${family}:${toId}:`), value); } cursor = page.list_complete ? undefined : page.cursor; } while (cursor);
+  }
+  const configText = await env.MONITOR.get(`hq:config:${toId}`);
+  if (configText) { const config = JSON.parse(configText); config.workspaceId = toId; config.updatedAt = Date.now(); await env.MONITOR.put(`hq:config:${toId}`, JSON.stringify(config)); }
+  await hqRegisterWorkspace(env, toId);
 }
 async function videoConfig(env, b) {
   let ownerReady = false;
