@@ -1,0 +1,1 @@
+NEXT ACTION: open draft PR now that branch differs from main. Then integrate V2 into worker with full-file safety and regression coverage.
