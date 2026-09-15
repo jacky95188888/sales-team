@@ -891,6 +891,7 @@ function videoPrompt(task, channel) {
     durationSeconds = Math.max(15, Math.min(35, Number(production.totalSeconds) || 30)),
     presenterSeconds = Math.max(0, Math.min(durationSeconds, 12, Number(production.presenterSeconds) || 9)),
     presenterName = String(task.presenter?.name || "創作者").slice(0, 60),
+    coHosts = (Array.isArray(task.coHosts) ? task.coHosts : []).filter((host) => host && host.name).slice(0, 2),
     brandStyle = String(production.brandStyle || "依產品定位建立一致、清楚且可信任的品牌視覺").slice(0, 500),
     callToAction = String(production.callToAction || "提供一個自然且可執行的下一步").slice(0, 500);
   return [
@@ -898,6 +899,9 @@ function videoPrompt(task, channel) {
     `主題：${String(task.goal || "").slice(0, 1000)}`,
     `產品：${String(task.product?.name || "目前主打產品").slice(0, 120)}`,
     `出鏡人物：${presenterName}。人物出鏡總長約 ${presenterSeconds} 秒，只用於關鍵開場、觀點或收尾。`,
+    coHosts.length
+      ? `共同主持人：${coHosts.map((host) => String(host.name).slice(0, 60)).join("、")}。已附共同主持人的參考照片；雙方必須輪流對話，至少各有一句台詞，並在結尾同框。不得把共同主持人替換成陌生臉孔。`
+      : "採單人主持。",
     task.contentMode === "statement" && task.statement
       ? `創作者親自陳述：${String(task.statement).slice(0, 4000)}\n必須保留這段陳述的核心立場與語氣，不可改成相反意思。`
       : "內容由 AI 自動構建，但要有明確觀點、真實情境與可執行下一步。",
