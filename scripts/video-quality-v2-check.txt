@@ -1,0 +1,5 @@
+branch-diff=yes
+quality-module=yes
+tests=yes
+ci=yes
+main-modified=no
