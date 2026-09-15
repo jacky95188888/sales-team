@@ -920,6 +920,16 @@ function videoPrompt(task, channel) {
     .join("\n\n")
     .slice(0, 10000);
 }
+const VIDEO_V3_COST_GUARD = Object.freeze({ directorPlanAttempts: 2, fullVideoRegenerations: 1, partialSceneRegenerations: 3, publishScore: 90, premiumScore: 95 });
+function videoV3Route(task = {}) { if (task.videoRoute === "B" || task.route === "B") return "B"; return task.product && Object.keys(task.product).length ? "A" : "B"; }
+function videoV3Json(raw = "") { let text = String(raw || "").trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/i, ""); const match = text.match(/\{[\s\S]*\}/); return JSON.parse(match ? match[0] : text); }
+function videoV3Preflight(plan = {}, task = {}) { const scenes = Array.isArray(plan.scenes) ? plan.scenes.slice(0, 10) : [], issues = [], kinds = new Set(), beats = new Set(); let prev = 0, effects = 0, presenter = 0, product = 0, exchange = 0; if (!plan.hook || !plan.thesis || !plan.twist || !plan.climax || !plan.cta) issues.push("故事骨架不完整"); if (scenes.length < 7) issues.push("鏡頭不足7段"); scenes.forEach((x, i) => { const start = Number(x.start || 0), end = Number(x.end || 0), duration = end - start, type = String(x.assetType || "").toLowerCase(), beat = String(x.storyBeat || ""); if (!(duration > 0)) issues.push(`第${i+1}鏡時間錯誤`); if (start < prev - .15) issues.push(`第${i+1}鏡重疊`); if (duration > 6) issues.push(`第${i+1}鏡超過6秒`); if (!beat) issues.push(`第${i+1}鏡缺劇情節點`); else beats.add(beat); if (!x.purpose || !x.visual) issues.push(`第${i+1}鏡缺畫面目的`); if (!x.narration && !x.subtitle) issues.push(`第${i+1}鏡缺內容`); if (Array.isArray(x.effects) && x.effects.length) effects++; if (x.presenter) presenter += Math.max(0, duration); if (type) kinds.add(type); if (/product|ui|screen|asset/.test(type) || x.assetUrl) product++; if (/debate|reaction|dialogue|exchange|衝突|對話|反應/i.test(beat + " " + String(x.purpose || ""))) exchange++; prev = Math.max(prev, end); }); const total = Number(scenes.at(-1)?.end || 0); if (scenes[0] && Number(scenes[0].end || 0) > 3.5) issues.push("前三秒鉤子太慢"); if (beats.size < 4) issues.push("劇情層次不足4個"); if (effects < 4) issues.push("特效節點不足4鏡"); const route = videoV3Route(task); if (route === "A" && task.product && product < 1) issues.push("缺少真實產品/UI鏡頭"); if (route === "B" && exchange < 1) issues.push("缺少觀點交換或衝突"); return { pass: !issues.length, issues, warnings: total && presenter / total > .55 ? ["人物出鏡超過55%"] : [], plan, metrics: { totalSeconds: total, presenterSeconds: presenter, effectBeats: effects, productScenes: product, exchangeScenes: exchange, visualKinds: [...kinds] } }; }
+function videoV3DirectorPrompt(task, channel, issues = []) { const route = videoV3Route(task); return ["你是95分精品短影音總導演。先把文字分鏡審到可拍，才花影片生成額度。", `產線${route}；平台${channel}；9:16優先；約30～45秒。`, `任務：${String(task.goal || "").slice(0, 3000)}`, `既有內容：${String(task.outputs?.[channel] || task.outputs?.video || "").slice(0, 6500)}`, issues.length ? `上次退件：${issues.join("；")}，逐項修正。` : "第一次導演計畫。", "只回JSON：{route,hook,thesis,twist,climax,cta,scenes:[{id,start,end,storyBeat,purpose,visual,narration,subtitle,assetType,assetUrl,presenter,transition,effects:[],soundDesign:[],camera}]}", "7～10鏡；0～3秒鉤子；至少4劇情節點、4鏡有效特效、4類視覺；單鏡<=6秒；人物原則<=55%。", route === "A" ? "至少一鏡真實產品/UI/指定素材，不得杜撰產品畫面。" : "至少一段主持人/顧問觀點交換、反應或衝突，不可單人念稿。", "台灣自然口語；特效與SFX服務情節；完成一個具體觀點；不得編造數據。"].join("\n"); }
+async function buildVideoV3DirectorPlan(env, task, channel) { let issues = []; for (let attempt = 1; attempt <= VIDEO_V3_COST_GUARD.directorPlanAttempts; attempt++) { const out = await claude(env, "你是短影音導演，只輸出合法JSON。", videoV3DirectorPrompt(task, channel, issues), 2600); let plan; try { plan = videoV3Json(out.text); } catch { issues = ["JSON格式錯誤"]; continue; } const check = videoV3Preflight(plan, task); if (check.pass) return { ...check, attempts: attempt }; issues = check.issues; } throw Object.assign(new Error(`VIDEO_V3_PREFLIGHT_FAILED:${issues.join("；")}`), { status: 409, preflight: { pass: false, issues } }); }
+function videoV3Prompt(task, channel, preflight) { const p = preflight.plan; return ["依照以下已通過V3 Preflight的導演計畫忠實製作。不要改成單人念稿。", "目標：90分以上才可發布，95分精品母片。", `產線：${videoV3Route(task)}；平台：${channel}`, `Hook：${p.hook}`, `核心：${p.thesis}`, `轉折：${p.twist}`, `高潮：${p.climax}`, `CTA：${p.cta}`, "逐鏡JSON：", JSON.stringify(p.scenes), "繁體中文字幕、高對比、安全區；聲音卡點；真實產品素材不得被AI虛構畫面取代。"].join("\n\n").slice(0, 12000); }
+function videoV3InitialQuality(preflight) { return { version: "3.0.0", status: "awaiting_render_review", pass: false, premium: false, score: null, publishThreshold: 90, premiumThreshold: 95, hardFailures: [], preflight: { pass: true, issues: [], warnings: preflight.warnings || [] }, costGuard: { ...VIDEO_V3_COST_GUARD, fullVideoRegenerationsUsed: 0, partialSceneRegenerationsUsed: 0 } }; }
+function videoV3AutoPublishGate(job = {}) { const q = job.quality || {}; if (q.version !== "3.0.0") return { pass: false, reason: "V3品質報告缺失" }; if (Array.isArray(q.hardFailures) && q.hardFailures.length) return { pass: false, reason: "硬性退件：" + q.hardFailures.join("、") }; if (q.pass !== true || Number(q.score || 0) < 90) return { pass: false, reason: `品質未達90分（${q.score ?? "尚未評分"}）` }; return { pass: true, premium: Number(q.score) >= 95 }; }
+
 async function videoRateLimit(env, workspaceId) {
   const day = new Date().toISOString().slice(0, 10);
   for (const [key, limit] of [
@@ -1006,9 +1016,11 @@ async function createVideoForRecord(env, record, channel) {
       new Error(`請先在營運總部完成「${presenterName}」的人物設定，避免產生陌生人物`),
       { status: 409 },
     );
+  // V3 COST GUARD: spend text tokens first; HeyGen credits are touched only after preflight passes.
+  const director = await buildVideoV3DirectorPlan(env, record.task, channel);
   await videoRateLimit(env, record.id);
   const request = {
-    prompt: videoPrompt(record.task, channel),
+    prompt: videoV3Prompt(record.task, channel, director),
     avatar_id: avatar.selectedLookId,
     mode: "generate",
     orientation: channel === "youtube" ? "landscape" : "portrait",
@@ -1034,6 +1046,9 @@ async function createVideoForRecord(env, record, channel) {
     sessionId: result.session_id,
     videoId: result.video_id || null,
     status: result.status || "generating",
+    directorPlan: director.plan,
+    preflight: { pass: director.pass, issues: director.issues, warnings: director.warnings, metrics: director.metrics, attempts: director.attempts },
+    quality: videoV3InitialQuality(director),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
