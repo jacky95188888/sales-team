@@ -1,0 +1,1 @@
+生成成功不等於品質成功。HeyGen/API 回傳 completed 只能進 `quality_review`，不能直接進發布。只有 `scoreRenderedVideo` 通過且 hardFailures 為空，狀態才可改為 `publish_queue`。
