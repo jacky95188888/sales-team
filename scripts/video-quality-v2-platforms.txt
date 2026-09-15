@@ -1,0 +1,3 @@
+portrait: TikTok, Reels/short video, YouTube Shorts when selected
+landscape: long-form YouTube when selected
+quality rules apply to both; scene timing may adapt by format.
