@@ -1,0 +1,9 @@
+foundation: complete
+director-contract: complete
+preflight: complete
+quality-score: complete
+hard-failures: complete
+ci-test: added
+worker-wiring: pending
+mother-video: pending
+main-merge: blocked until acceptance
