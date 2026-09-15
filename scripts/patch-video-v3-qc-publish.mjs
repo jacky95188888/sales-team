@@ -24,13 +24,9 @@ async function videoQuality(req, env, b) {
 }
 `;
 src=src.replace(anchor,qc+"\n"+anchor);
-// Add endpoint dispatch next to video-status when exact switch/if pattern exists.
-const dispatchPatterns=[
-  ['if (path === "/video-status") return videoStatus(req, env, b);','if (path === "/video-status") return videoStatus(req, env, b);\n      if (path === "/video-quality") return videoQuality(req, env, b);'],
-  ['case "/video-status": return videoStatus(req, env, b);','case "/video-status": return videoStatus(req, env, b);\n      case "/video-quality": return videoQuality(req, env, b);']
-];
-let dispatched=false;for(const [a,b] of dispatchPatterns){if(src.includes(a)){src=src.replace(a,b);dispatched=true;break;}}
-if(!dispatched)throw new Error("video-status dispatch anchor missing; refusing unsafe patch");
+const dispatchNeedle='      if (url.pathname === "/video-status")\n        return json(await videoStatus(req, env, b), 200, H);';
+if(!src.includes(dispatchNeedle))throw new Error("video-status url.pathname dispatch anchor missing; refusing unsafe patch");
+src=src.replace(dispatchNeedle,dispatchNeedle+'\n      if (url.pathname === "/video-quality")\n        return json(await videoQuality(req, env, b), 200, H);');
 // Gate direct publish: manual legacy approval remains compatible; auto mode requires V3 >=90.
 const publishNeedle='const videoJob =';
 const publishPos=src.indexOf(publishNeedle,src.indexOf('async function publishVideo'));
