@@ -1,0 +1,28 @@
+name: Apply Video Quality V3 Tests
+on:
+  push:
+    branches: [video-quality-v3-clean]
+    paths:
+      - scripts/patch-video-v3-tests.mjs
+      - .github/workflows/apply-video-v3-tests.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: video-quality-v3-clean, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node scripts/patch-video-v3-tests.mjs
+      - run: node --check scripts/test-hq-worker.mjs
+      - name: Commit upgraded tests
+        run: |
+          if git diff --quiet -- scripts/test-hq-worker.mjs; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/test-hq-worker.mjs
+          git commit -m 'Test V3 director preflight before HeyGen'
+          git push origin HEAD:video-quality-v3-clean
