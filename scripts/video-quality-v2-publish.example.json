@@ -1,0 +1,1 @@
+{"qualityGate":{"required":true,"threshold":80,"hardFailuresMustBeEmpty":true},"onPass":"publish_queue","onFail":"regenerate","autoPublishBeforeMotherVideoApproval":false}
