@@ -19,6 +19,24 @@
 建立真正的 AI 行銷製片公司，不是 AI 人物念稿：
 市場雷達 → 行銷策略 → Creative Producer → 選題企劃 → 編劇 → 導演 → 攝影 → 美術/道具 → 表演/聲音 → 高品質影像生成 → 剪接後製 → 平台包裝 → Compliance/Fact Check → Production QC + Visual QC → Experiment → Publishing → Analytics → Learning Memory → 隔日調整。
 
+## SKILL 專業證據標準
+### IMPLEMENTED — 所有新/升級 Skill 必須遵守
+每個 Skill 不能只靠角色 Prompt 或模型常識。專業規則必須標示 `evidenceBasis`，至少分三層：
+1. `professionalSource`：官方/專業製作教材、平台官方指南、工具原廠認證訓練或可驗證業界流程。
+2. `marketEvidence`：近期同類高表現公開影片的結構資料；使用 views/likes/comments 等公開數據，不能捏造後台 retention。
+3. `firstPartyLearning`：美女顧問團自己發布後的 Analytics、QC、成本與版本實驗結果。
+
+規則來源優先序不是盲目服從單一來源：安全/法規/品牌硬限制 > 可驗證專業製作原則 > 本產品第一方實驗結果 > 市場樣本共同模式 > 單一案例。
+
+每個 Skill 至少要有：`mission`、`inputs`、`professionalKnowledge`、`decisionRules`、`hardRejects`、`outputs`、`handoff`、`kpi`、`evidenceBasis`、`version`。沒有 evidenceBasis 的 Skill 只能標 DRAFT，不得稱為 production-ready。
+
+目前已採用的專業來源方向：
+- Adobe 官方 production guidance：shooting script、storyboard、shot list、coverage、blocking，以及 Director/Cinematographer 在拍攝前共同決定鏡位與需求。
+- Blackmagic Design 官方 DaVinci Resolve Training：editing、color、visual effects、Fairlight sound design/audio、delivery，作為 Editor / Color / VFX / Audio 專業知識來源。
+- YouTube 官方 Help/Analytics：Shorts 的 views、likes、engaged views、stayed-to-watch、audience retention/key moments，以及 hook、storytelling、packaging/metadata 等平台表現概念。
+
+專業資料必須轉成可執行判斷，不可大段複製教材文字。來源若更新，要記 `sourceCheckedAt` 與 Skill version。
+
 ## 品質規則
 ### IMPLEMENTED
 - V3.1：正式母片最低 1080p。
@@ -47,31 +65,9 @@
 ### DISCUSSED — 下一階段必須施工
 美女顧問團每次正式製片前，YouTube 高表現影片結構是重要參考資料，不得跳過。
 
-Reference Brief 優先使用同題材、同平台/短影音型態、近期且公開成績可驗證的樣本。公開可用欄位：
-- videoId / title / channel
-- publishedAt
-- views
-- likes（可取得時）
-- comments（可取得時）
-- like/view ratio（資料足夠時）
-- topic / format / duration
+Reference Brief 優先使用同題材、同平台/短影音型態、近期且公開成績可驗證的樣本。公開可用欄位：videoId/title/channel/publishedAt/views/likes/comments/like-view ratio/topic/format/duration。2025-03-31 後 YouTube Shorts 公開 views 的計數方式已改為每次開始播放或重播即可計入，因此跨時期比較時必須標記 metric regime；`engaged views` 才保留「選擇繼續觀看」的比較用途。拿不到創作者後台 retention / engaged views 時標記 unknown，不得推測。
 
-不得假裝擁有創作者後台 retention。拿不到 average view duration / retention 時標記 unknown。
-
-每支有效樣本拆解：
-- 0–3 秒 Hook
-- 第一次切鏡
-- 第一次 payoff
-- 平均換鏡節奏
-- story beats
-- conflict / twist / reveal
-- climax timing
-- presenter ratio
-- cinematic B-roll / real UI / product proof
-- effects density
-- caption rhythm
-- SFX / BGM beats
-- CTA
+每支有效樣本拆解：0–3 秒 Hook、第一次切鏡、第一次 payoff、平均換鏡節奏、story beats、conflict/twist/reveal、climax timing、presenter ratio、cinematic B-roll/real UI/product proof、effects density、caption rhythm、SFX/BGM beats、CTA。
 
 Director Skill 只能學習多支作品的共同結構、節奏與製作技法；禁止複製單一作品的腳本、角色、獨特畫面或創意表達。
 
