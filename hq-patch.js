@@ -36,6 +36,13 @@
     { id: "youtube", label: "YouTube 完整影片" },
     { id: "line", label: "LINE 訊息" }
   ];
+  var COHOST_LIBRARY = {
+    "江星瑤": { name: "江星瑤", imageUrl: "https://jacky95188888.github.io/sales-team/IMG_0234.jpeg", role: "創新官與策略主持人" }
+  };
+  function coHostsForGoal(goal) {
+    return Object.keys(COHOST_LIBRARY).filter(function (name) { return String(goal || "").indexOf(name) >= 0; })
+      .map(function (name) { return COHOST_LIBRARY[name]; }).slice(0, 2);
+  }
 
   function E(v) {
     return String(v == null ? "" : v)
@@ -1075,13 +1082,19 @@
     var assets;
     try { assets = await uploadTaskAssets(); }
     catch (err) { msg.innerHTML = '<div class="hq-error">' + E(err && err.message ? err.message : err) + '</div>'; createButton.disabled = false; createButton.textContent = "建立任務並開始產線 ▶"; return; }
+    var coHosts = coHostsForGoal(goal);
+    coHosts.forEach(function (host) {
+      if (!assets.some(function (asset) { return asset && asset.url === host.imageUrl; })) {
+        assets.push({ id: "advisor-" + host.name, name: host.name + "主持參考照", mediaType: "image/jpeg", url: host.imageUrl, scope: "reference" });
+      }
+    });
     var employees = ["市場策略員", "內容創作員", "品質主管"];
     if (channels.indexOf("video") >= 0) employees.splice(2, 0, "短影音編導");
     if (channels.indexOf("tiktok") >= 0) employees.splice(employees.length - 1, 0, "TikTok 編導");
     if (channels.indexOf("youtube") >= 0) employees.splice(employees.length - 1, 0, "YouTube 製作人");
     var autoVideoEnabled = approvalMode() === "auto" && !!document.getElementById("hqAutoPaidVideo").checked;
     saveCurrentSetup();
-    var t = { id: uid(), goal: goal, contentMode: contentMode, statement: statement.slice(0, 6000), assets: assets, product: product, presenter: activePresenter(), production: currentProductionProfile(), channels: channels, employees: employees, approvalMode: approvalMode(), autoVideoEnabled: autoVideoEnabled, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
+    var t = { id: uid(), goal: goal, contentMode: contentMode, statement: statement.slice(0, 6000), assets: assets, coHosts: coHosts, product: product, presenter: activePresenter(), production: currentProductionProfile(), channels: channels, employees: employees, approvalMode: approvalMode(), autoVideoEnabled: autoVideoEnabled, state: "queued", createdAt: Date.now(), updatedAt: Date.now(), outputs: {} };
     var rows = read(); rows.unshift(t); write(rows);
     remoteUpsert(t); syncConfig(channels);
     document.getElementById("hqGoal").value = "";
