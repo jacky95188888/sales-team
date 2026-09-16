@@ -1,5 +1,6 @@
 /* Reference Brief discovery helpers for Cloudflare Worker.
- * Uses YouTube Data API v3 public metadata only. It never invents creator-only retention.
+ * Uses YouTube Data API v3 public metadata only for discovery.
+ * Structure analysis must come from trusted frame/transcript/video evidence; never invent creator-only retention.
  */
 const arr=v=>Array.isArray(v)?v:[];
 const str=(v,m=1200)=>String(v??"").trim().slice(0,m);
@@ -8,6 +9,7 @@ const isoNow=()=>new Date().toISOString();
 
 export const REFERENCE_MIN_CANDIDATES=3;
 export const REFERENCE_TARGET_CANDIDATES=5;
+export const TRUSTED_REFERENCE_EVIDENCE=new Set(["trusted-frames","trusted-frames-plus-transcript","trusted-video-analysis"]);
 
 function metricRegime(publishedAt){
   const t=Date.parse(publishedAt||"");
@@ -68,7 +70,7 @@ export async function discoverYouTubeReferences({env,query,maxResults=REFERENCE_
     candidates,
     privateMetricsAvailable:false,
     privateMetricsUnknown:["engagedViews","stayedToWatch","audienceRetention","averagePercentageViewed"],
-    note:"Public metadata is discovery evidence only. Hook/story/edit breakdown still requires transcript, scene analysis, or a trusted visual-analysis stage."
+    note:"Public metadata is discovery evidence only. Hook/story/edit breakdown requires trusted frame, transcript, or video analysis."
   };
 }
 
@@ -89,33 +91,46 @@ export function normalizeReferenceAnalysis(input={}){
     captionRhythm:str(input.captionRhythm,500),
     cta:str(input.cta,500),
     evidenceType:str(input.evidenceType,100),
+    visualEvidenceCount:Math.max(0,num(input.visualEvidenceCount)),
+    transcriptEvidence:input.transcriptEvidence&&typeof input.transcriptEvidence==="object"?{
+      available:input.transcriptEvidence.available===true,
+      source:str(input.transcriptEvidence.source,200)
+    }:{available:false,source:""},
+    unknowns:arr(input.unknowns).slice(0,20).map(x=>str(x,220)).filter(Boolean),
+    evidenceNotes:arr(input.evidenceNotes).slice(0,20).map(x=>str(x,300)).filter(Boolean),
     confidence:Math.max(0,Math.min(1,num(input.confidence,0)))
   };
 }
 
+function trustedAnalysis(x={}){
+  return TRUSTED_REFERENCE_EVIDENCE.has(x.evidenceType)&&x.visualEvidenceCount>=3&&x.confidence>=.6;
+}
+
 function modeStrings(groups){
   const counts=new Map();
-  for(const g of groups)for(const x of arr(g)){const k=str(x,260).toLowerCase();if(k)counts.set(k,(counts.get(k)||0)+1);}
+  for(const g of groups)for(const x of arr(g)){const k=str(x,260).toLowerCase();if(k&&k!=="unknown")counts.set(k,(counts.get(k)||0)+1);}
   return [...counts.entries()].sort((a,b)=>b[1]-a[1]).filter(([,c])=>c>=2).slice(0,8).map(([pattern,count])=>({pattern,count}));
 }
 
 export function buildReferenceBrief({discovery,analyses=[],topic="",audience="",platform="shorts"}){
   const candidates=arr(discovery?.candidates);
   const normalized=arr(analyses).map(normalizeReferenceAnalysis).filter(x=>x.videoId);
-  const analyzedIds=new Set(normalized.filter(x=>x.confidence>=.55).map(x=>x.videoId));
-  const usableCandidates=candidates.filter(x=>analyzedIds.has(x.videoId));
+  const trusted=normalized.filter(trustedAnalysis);
+  const trustedIds=new Set(trusted.map(x=>x.videoId));
+  const usableCandidates=candidates.filter(x=>trustedIds.has(x.videoId));
   const common={
-    hookPatterns:modeStrings(normalized.map(x=>[x.hook])),
-    storyPatterns:modeStrings(normalized.map(x=>x.storyBeats)),
-    brollPatterns:modeStrings(normalized.map(x=>x.brollTypes)),
-    effectPatterns:modeStrings(normalized.map(x=>x.effectBeats)),
-    soundPatterns:modeStrings(normalized.map(x=>x.soundBeats)),
-    ctaPatterns:modeStrings(normalized.map(x=>[x.cta]))
+    hookPatterns:modeStrings(trusted.map(x=>[x.hook])),
+    storyPatterns:modeStrings(trusted.map(x=>x.storyBeats)),
+    brollPatterns:modeStrings(trusted.map(x=>x.brollTypes)),
+    effectPatterns:modeStrings(trusted.map(x=>x.effectBeats)),
+    soundPatterns:modeStrings(trusted.filter(x=>x.transcriptEvidence.available).map(x=>x.soundBeats)),
+    ctaPatterns:modeStrings(trusted.filter(x=>x.transcriptEvidence.available).map(x=>[x.cta]))
   };
   const structuralPatternCount=Object.values(common).reduce((n,x)=>n+x.length,0);
   const pass=usableCandidates.length>=REFERENCE_MIN_CANDIDATES&&structuralPatternCount>=3;
+  const untrusted=normalized.filter(x=>!trustedAnalysis(x)).map(x=>({videoId:x.videoId,evidenceType:x.evidenceType,visualEvidenceCount:x.visualEvidenceCount,confidence:x.confidence}));
   return {
-    version:"2.0.0",
+    version:"2.1.0",
     status:pass?"PASS":"REFERENCE_EVIDENCE_INCOMPLETE",
     topic:str(topic,300),
     audience:str(audience,300),
@@ -123,11 +138,20 @@ export function buildReferenceBrief({discovery,analyses=[],topic="",audience="",
     checkedAt:isoNow(),
     source:"public-evidence-plus-trusted-structure-analysis",
     candidates:candidates.slice(0,10),
-    analyzedVideoIds:[...analyzedIds],
+    analyzedVideoIds:[...trustedIds],
     commonPatterns:common,
-    evidenceSummary:{publicCandidateCount:candidates.length,usableAnalyzedCount:usableCandidates.length,structuralPatternCount},
+    evidenceSummary:{
+      publicCandidateCount:candidates.length,
+      submittedAnalysisCount:normalized.length,
+      trustedAnalysisCount:trusted.length,
+      usableAnalyzedCount:usableCandidates.length,
+      structuralPatternCount,
+      analysesWithTranscript:trusted.filter(x=>x.transcriptEvidence.available).length
+    },
+    rejectedAnalyses:untrusted,
     inaccessibleMetrics:["creatorRetention","stayedToWatch","engagedViews"],
     originalityGuard:"Learn repeated structures only; do not copy a single creator's wording, character, signature scene, joke, or distinctive expression.",
+    evidenceGuard:"Only trusted frame/transcript/video analysis with >=3 visual samples and confidence >=0.60 may satisfy the runtime gate.",
     issues:pass?[]:[
       ...(candidates.length<REFERENCE_MIN_CANDIDATES?["公開候選影片不足3支"]:[]),
       ...(usableCandidates.length<REFERENCE_MIN_CANDIDATES?["至少需要3支可信的結構分析"]:[]),
