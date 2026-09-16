@@ -99,6 +99,7 @@ assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
 assert.deepEqual(config.secrets?.optional, [
   "HEYGEN_API_KEY",
   "PUBLISH_TOKEN_KEY",
+  "YOUTUBE_API_KEY",
   "YOUTUBE_CLIENT_ID",
   "YOUTUBE_CLIENT_SECRET",
   "TIKTOK_CLIENT_KEY",
