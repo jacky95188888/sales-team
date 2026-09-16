@@ -33,6 +33,7 @@ const requiredRoutes = [
   "/voice-status",
   "/video-create",
   "/video-status",
+  "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
   "/oauth-disconnect",
@@ -85,6 +86,8 @@ assert.match(worker, /config\.autoVideoEnabled === true/);
 assert.match(worker, /request\.voice_id = voice\.id/);
 assert.match(worker, /request\.files = files/);
 assert.match(worker, /嚴禁超過35秒/);
+assert.match(worker, /REFERENCE_RUNTIME_V1/);
+assert.match(worker, /referenceOrchestrate/);
 
 assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");
