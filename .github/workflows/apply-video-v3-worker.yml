@@ -1,0 +1,49 @@
+name: Apply Video Quality V3 Worker
+
+on:
+  push:
+    branches: [video-quality-v3-clean]
+    paths:
+      - scripts/patch-video-v3-worker.mjs
+      - .github/workflows/apply-video-v3-worker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: video-quality-v3-clean
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply deterministic patch to complete Worker
+        run: node scripts/patch-video-v3-worker.mjs
+      - name: Syntax check
+        run: node --check sales-team-worker.js
+      - name: Verify V3 is before HeyGen spend
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'); const s=fs.readFileSync('sales-team-worker.js','utf8');
+          const fn=s.indexOf('async function createVideoForRecord');
+          const pre=s.indexOf('buildVideoV3DirectorPlan(env, record.task, channel)',fn);
+          const rate=s.indexOf('await videoRateLimit(env, record.id)',fn);
+          const hey=s.indexOf('await heygen(env, "/v3/video-agents"',fn);
+          if(!(fn>=0 && pre>fn && rate>pre && hey>rate)) throw new Error('V3 cost ordering failed');
+          if(!s.includes('quality: videoV3InitialQuality(director)')) throw new Error('V3 quality state missing');
+          console.log('V3 order OK: preflight -> rate limit -> HeyGen');
+          NODE
+      - name: Commit integrated Worker
+        run: |
+          if git diff --quiet -- sales-team-worker.js; then
+            echo 'Worker already integrated'; exit 0;
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add sales-team-worker.js
+          git commit -m 'Integrate V3 preflight before HeyGen generation'
+          git push origin HEAD:video-quality-v3-clean

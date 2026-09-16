@@ -1,0 +1,45 @@
+name: Apply Video Quality V3 QC
+on:
+  push:
+    branches: [video-quality-v3-clean]
+    paths:
+      - scripts/patch-video-v3-qc-publish.mjs
+      - .github/workflows/apply-video-v3-qc.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: video-quality-v3-clean
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply QC patch to complete Worker
+        run: node scripts/patch-video-v3-qc-publish.mjs
+      - name: Syntax check
+        run: node --check sales-team-worker.js
+      - name: Verify quality endpoint and gates
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');const s=fs.readFileSync('sales-team-worker.js','utf8');
+          const need=['/video-quality','function videoV3QualityScore','function videoV3HardFailures','async function videoQuality','function videoV3AutoPublishGate','自動發布已被 V3 品質閘門擋下','影片有 V3 硬性退件'];
+          for(const x of need) if(!s.includes(x)) throw new Error('missing '+x);
+          const pub=s.indexOf('async function publishVideo');
+          const gate=s.indexOf('自動發布已被 V3 品質閘門擋下',pub);
+          const token=s.indexOf('const token',pub);
+          if(!(pub>=0&&gate>pub&&token>gate)) throw new Error('publish gate is not before publisher token');
+          console.log('V3 QC gate verified before publisher API/token stage');
+          NODE
+      - name: Commit integrated QC Worker
+        run: |
+          if git diff --quiet -- sales-team-worker.js; then echo 'No Worker change'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add sales-team-worker.js
+          git commit -m 'Integrate V3 render QC and publish gate'
+          git push origin HEAD:video-quality-v3-clean
