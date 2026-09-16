@@ -27,6 +27,7 @@ const ROUTES = new Set([
   "/voice-status",
   "/video-create",
   "/video-status",
+  "/video-quality",
   "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
@@ -1186,6 +1187,68 @@ async function videoStatus(req, env, b) {
   await saveVideoJob(env, record, channel, job);
   return { ok: true, job };
 }
+// TRUSTED_VISUAL_QC_V1
+function videoV3QualityScore(report = {}) {
+  const weights = { hook:12, story:15, effects:15, substance:15, visualRhythm:12, faceNaturalness:10, voiceNaturalness:8, captions:6, brandFit:7 };
+  let score=0;
+  for(const [k,w] of Object.entries(weights)){
+    const v=Math.max(0,Math.min(100,Number(report[k]||0)));
+    score += v*w/100;
+  }
+  return Math.round(score);
+}
+function videoV3VisualScore(report = {}) {
+  const weights={photorealism:18,textureDetail:12,lighting:12,motionCoherence:15,physicalPlausibility:10,identityConsistency:12,cinematicComposition:10,artifactControl:11};
+  let score=0;
+  for(const [k,w] of Object.entries(weights)){
+    const v=Math.max(0,Math.min(100,Number(report[k]||0)));
+    score += v*w/100;
+  }
+  return Math.round(score);
+}
+function videoV3HardFailures(report={}) {
+  const allowed=new Set(["face_break","lip_sync","wrong_identity","blank_frame","broken_audio","unsafe_caption","no_story","no_effect_design","plastic_ai_look","texture_failure","motion_morphing","physics_break","hand_object_deform","background_melting","identity_drift","text_logo_corruption","product_ui_corruption","severe_flicker","subject_edge_warp","unnatural_depth_of_field"]);
+  return [...new Set((Array.isArray(report.hardFailures)?report.hardFailures:[]).map(String).filter(x=>allowed.has(x)))];
+}
+function videoV3TrustedGate(job={}) {
+  const q=job.quality||{};
+  if(q.version!=="3.0.0") return {pass:false,reason:"V3品質報告缺失"};
+  if(q.referenceGate?.required===true&&q.referenceGate?.pass!==true) return {pass:false,reason:"Reference Gate 未通過"};
+  if(q.reviewSource!=="trusted_server") return {pass:false,reason:"尚未完成伺服器可信 QC"};
+  if(q.visual?.trusted!==true) return {pass:false,reason:"尚未完成可信 Visual QC"};
+  if(q.visual?.pass!==true||Number(q.visual?.score||0)<90) return {pass:false,reason:`Visual QC 未達90分（${q.visual?.score??"尚未評分"}）`};
+  if(Array.isArray(q.hardFailures)&&q.hardFailures.length) return {pass:false,reason:"硬性退件："+q.hardFailures.join("、")};
+  if(q.pass!==true||Number(q.score||0)<90) return {pass:false,reason:`製作品質未達90分（${q.score??"尚未評分"}）`};
+  return {pass:true,premium:Number(q.score)>=95&&Number(q.visual.score)>=90,reason:Number(q.score)>=95?"95分精品母片":"90分以上可發布"};
+}
+async function videoQuality(req, env, b) {
+  await requireVideoAccess(env,b.workspaceId);
+  const channel=String(b.channel||"");
+  if(!["video","tiktok","youtube"].includes(channel)) throw Object.assign(new Error("不支援的影片平台"),{status:400});
+  const record=await hqTaskForVideo(env,b.workspaceId,b.taskId), old=record.task.videoJobs?.[channel];
+  if(!old) throw Object.assign(new Error("這個平台尚未建立影片"),{status:404});
+  if(old.status!=="completed"||!old.videoUrl) throw Object.assign(new Error("影片尚未完成，不能評分"),{status:409});
+  const report=b.report&&typeof b.report==="object"?b.report:{};
+  const manualReview={source:"manual_client",score:videoV3QualityScore(report),hardFailures:videoV3HardFailures(report),notes:String(report.notes||"").slice(0,3000),reviewedAt:Date.now()};
+  const job={...old,manualReview,updatedAt:Date.now()};
+  await saveVideoJob(env,record,channel,job);
+  return {ok:true,manualReview,autoPublishUnlocked:false,gate:videoV3TrustedGate(job)};
+}
+async function applyVideoV3TrustedQualityReview(env, record, channel, trustedReport={}) {
+  const old=record.task.videoJobs?.[channel];
+  if(!old||old.status!=="completed"||!old.videoUrl) throw Object.assign(new Error("影片尚未完成，不能做可信 QC"),{status:409});
+  if(trustedReport.source!=="server_visual_qc") throw Object.assign(new Error("TRUSTED_QC_SOURCE_REQUIRED"),{status:403});
+  const production=trustedReport.production&&typeof trustedReport.production==="object"?trustedReport.production:{};
+  const visual=trustedReport.visual&&typeof trustedReport.visual==="object"?trustedReport.visual:{};
+  const hardFailures=videoV3HardFailures({hardFailures:[...(Array.isArray(production.hardFailures)?production.hardFailures:[]),...(Array.isArray(visual.hardFailures)?visual.hardFailures:[])]});
+  const score=videoV3QualityScore(production);
+  const visualScore=videoV3VisualScore(visual);
+  const quality={...(old.quality||{}),version:"3.0.0",status:"trusted_reviewed",reviewSource:"trusted_server",score,pass:score>=90&&!hardFailures.length,premium:score>=95&&visualScore>=90&&!hardFailures.length,hardFailures,reviewedAt:Date.now(),visual:{trusted:true,score:visualScore,pass:visualScore>=90&&!hardFailures.length,sampleCount:Number(visual.sampleCount||0),model:String(visual.model||"").slice(0,120),notes:String(visual.notes||"").slice(0,2000)},productionDimensions:production};
+  const job={...old,quality,updatedAt:Date.now()};
+  await saveVideoJob(env,record,channel,job);
+  return {job,quality,gate:videoV3TrustedGate(job)};
+}
+
 const PUBLISH_PROVIDERS = new Set(["youtube", "tiktok"]);
 function publishProvider(value) {
   const provider = String(value || "").toLowerCase();
@@ -1474,6 +1537,10 @@ async function publishVideo(env, b) {
   const videoJob = task.videoJobs?.[channel] || (provider === "youtube" ? task.videoJobs?.video : null);
   if (videoJob?.status !== "completed" || !videoJob.videoUrl)
     throw Object.assign(new Error("這個平台的 MP4 尚未完成"), { status: 409 });
+  if (task.approvalMode === "auto") {
+    const gate=videoV3TrustedGate(videoJob);
+    if(!gate.pass) throw Object.assign(new Error("自動發布已被可信 V3 QC 擋下："+gate.reason),{status:409});
+  }
   let token = await getPublisher(env, record.id, provider);
   if (!token) throw Object.assign(new Error(`請先連接 ${provider === "youtube" ? "YouTube" : "TikTok"} 帳號`), { status: 409 });
   const privacy = String(b.privacy || (provider === "youtube" ? "private" : ""));
@@ -1776,6 +1843,11 @@ async function hqProcessAutoPublish(env) {
             currentVideo = checked.job;
           }
           if (currentVideo?.status !== "completed" || !currentVideo.videoUrl) continue;
+          const qualityGate=videoV3TrustedGate(currentVideo);
+          if(!qualityGate.pass){
+            await env.MONITOR.put(`hq:auto-publish-hold:${workspaceId}:${task.id}:${provider}`,JSON.stringify({at:Date.now(),reason:qualityGate.reason}),{expirationTtl:604800});
+            continue;
+          }
           const privacy = String(config.publishPrivacy?.[provider] || (provider === "youtube" ? "private" : ""));
           if (provider === "tiktok" && !privacy) continue;
           await publishVideo(env, { workspaceId, taskId: task.id, provider, privacy });
@@ -1862,6 +1934,8 @@ export default {
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
         return json(await videoStatus(req, env, b), 200, H);
+      if (url.pathname === "/video-quality")
+        return json(await videoQuality(req, env, b), 200, H);
       if (url.pathname === "/reference-orchestrate")
         return json(await referenceOrchestrate(env, b), 200, H);
       if (url.pathname === "/publish-config")
