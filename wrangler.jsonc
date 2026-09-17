@@ -1,6 +1,6 @@
 {
   "name": "sales-team",
-  "main": "sales-team-worker.js",
+  "main": "sales-team-worker-v2.js",
   "compatibility_date": "2026-07-20",
   "kv_namespaces": [
     {
@@ -22,7 +22,9 @@
       "YOUTUBE_CLIENT_ID",
       "YOUTUBE_CLIENT_SECRET",
       "TIKTOK_CLIENT_KEY",
-      "TIKTOK_CLIENT_SECRET"
+      "TIKTOK_CLIENT_SECRET",
+      "THREADS_APP_ID",
+      "THREADS_APP_SECRET"
     ]
   }
 }
