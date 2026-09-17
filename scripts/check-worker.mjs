@@ -14,8 +14,8 @@ for (const route of requiredRoutes) assert.ok(worker.includes(`"${route}"`), `Mi
 
 const threadsRoutes = ["/threads-config","/threads-oauth-start","/threads-disconnect","/threads-action","/oauth/threads/callback"];
 for (const route of threadsRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing Threads route: ${route}`);
-assert.match(workerV2, /legacyWorker\.fetch/);
-assert.match(workerV2, /legacyWorker\.scheduled/);
+assert.match(workerV2, /baseWorker\.fetch/);
+assert.match(workerV2, /baseWorker\.scheduled/);
 assert.match(threadsBridge, /THREADS_APP_ID/);
 assert.match(threadsBridge, /THREADS_APP_SECRET/);
 assert.match(threadsBridge, /AES-GCM/);
