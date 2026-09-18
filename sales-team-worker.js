@@ -1,3 +1,5 @@
+import { discoverThreadsTopics, draftThreadsPost, learnFromThreadsMetrics, normalizeThreadsConfig } from "./threads-growth.js";
+
 const MODEL = "claude-sonnet-4-6",
   ORIGIN = "https://jacky95188888.github.io";
 const ROUTES = new Set([
@@ -16,6 +18,13 @@ const ROUTES = new Set([
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/threads-growth/config",
+  "/threads-growth/discover",
+  "/threads-growth/draft",
+  "/threads-growth/approve",
+  "/threads-growth/publish",
+  "/threads-growth/metrics",
+  "/threads-growth/learn",
   "/hq-config",
   "/hq-tasks",
   "/video-config",
@@ -35,6 +44,62 @@ const ROUTES = new Set([
   "/publish-video",
   "/publish-status",
 ]);
+async function threadsGrowth(env, path, b) {
+  if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const cfgKey = "threads:growth:config";
+  if (path === "/threads-growth/config") {
+    if ((b.action || "get") === "get") return { config: normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}")) };
+    const config = normalizeThreadsConfig(b.config || b);
+    await env.MONITOR.put(cfgKey, JSON.stringify(config));
+    return { ok: true, config };
+  }
+  const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
+  if (path === "/threads-growth/discover") {
+    const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    return { stage: "discover", ...(await discoverThreadsTopics(env, { ...b, config, history })) };
+  }
+  if (path === "/threads-growth/draft") {
+    const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    const learned = JSON.parse((await env.MONITOR.get("threads:growth:learned")) || "{}");
+    const draft = await draftThreadsPost(env, { ...b, history, learned });
+    const id = "th_" + Date.now() + "_" + crypto.randomUUID().slice(0, 8);
+    const record = { id, status: "pending_review", topic: String(b.topic || "").slice(0, 300), ...draft, createdAt: Date.now(), updatedAt: Date.now() };
+    await env.MONITOR.put("threads:growth:draft:" + id, JSON.stringify(record), { expirationTtl: 2592000 });
+    return { stage: "draft", draft: record };
+  }
+  if (path === "/threads-growth/approve") {
+    const id = String(b.draftId || "").slice(0, 100);
+    const key = "threads:growth:draft:" + id;
+    const record = JSON.parse((await env.MONITOR.get(key)) || "null");
+    if (!record) throw Object.assign(new Error("DRAFT_NOT_FOUND"), { status: 404 });
+    if (record.status !== "pending_review") throw Object.assign(new Error("DRAFT_NOT_PENDING"), { status: 409 });
+    record.status = b.approved === false ? "rejected" : "approved";
+    record.reviewedAt = Date.now(); record.updatedAt = Date.now();
+    await env.MONITOR.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+    return { stage: "approve", draft: record };
+  }
+  if (path === "/threads-growth/publish") {
+    const id = String(b.draftId || "").slice(0, 100), key = "threads:growth:draft:" + id;
+    const record = JSON.parse((await env.MONITOR.get(key)) || "null");
+    if (!record) throw Object.assign(new Error("DRAFT_NOT_FOUND"), { status: 404 });
+    if (record.status !== "approved") throw Object.assign(new Error("THREADS_APPROVAL_REQUIRED"), { status: 409 });
+    if (!env.THREADS_ACCESS_TOKEN || !env.THREADS_USER_ID) throw Object.assign(new Error("THREADS_OFFICIAL_AUTH_REQUIRED"), { status: 409 });
+    throw Object.assign(new Error("THREADS_PUBLISH_NOT_CONNECTED_YET"), { status: 501 });
+  }
+  if (path === "/threads-growth/metrics") {
+    const rows = Array.isArray(b.rows) ? b.rows.slice(-200) : [];
+    await env.MONITOR.put("threads:growth:history", JSON.stringify(rows));
+    return { stage: "metrics", saved: rows.length };
+  }
+  if (path === "/threads-growth/learn") {
+    const rows = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    const learned = learnFromThreadsMetrics(rows);
+    await env.MONITOR.put("threads:growth:learned", JSON.stringify(learned));
+    return { stage: "learn", learned };
+  }
+  throw Object.assign(new Error("THREADS_ROUTE_NOT_FOUND"), { status: 404 });
+}
+
 const RULES = `使用繁體中文、台灣口語。食品保健不宣稱療效；不保證獲利或成功；命理標示僅供參考；價格與數據只能引用產品資料或搜尋來源。每項建議必須具體到做什麼、怎麼做、第一步。外部事實標【事實】，未查證推論標【推測】。`;
 const AGENTS = {
   insight: ["洞察官", "賈伯斯＋奧格威", "看穿客人真正渴望與數據背後的人"],
@@ -1729,6 +1794,8 @@ export default {
         });
         return out;
       }
+      if (url.pathname.startsWith("/threads-growth/"))
+        return json(await threadsGrowth(env, url.pathname, b), 200, H);
       if (url.pathname === "/monitor-config")
         return json(await monitorConfig(env, b), 200, H);
       if (url.pathname === "/monitor-subscribe")
