@@ -31,8 +31,11 @@ const requiredRoutes = [
   "/media-assets",
   "/voice-create",
   "/voice-status",
+  "/video-preflight",
   "/video-create",
   "/video-status",
+  "/video-quality",
+  "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
   "/oauth-disconnect",
@@ -85,6 +88,8 @@ assert.match(worker, /config\.autoVideoEnabled === true/);
 assert.match(worker, /request\.voice_id = voice\.id/);
 assert.match(worker, /request\.files = files/);
 assert.match(worker, /嚴禁超過35秒/);
+assert.match(worker, /REFERENCE_RUNTIME_V1/);
+assert.match(worker, /referenceOrchestrate/);
 
 assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");
@@ -99,6 +104,7 @@ assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
 assert.deepEqual(config.secrets?.optional, [
   "HEYGEN_API_KEY",
   "PUBLISH_TOKEN_KEY",
+  "YOUTUBE_API_KEY",
   "YOUTUBE_CLIENT_ID",
   "YOUTUBE_CLIENT_SECRET",
   "TIKTOK_CLIENT_KEY",

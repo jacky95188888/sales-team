@@ -25,8 +25,11 @@ const ROUTES = new Set([
   "/media-assets",
   "/voice-create",
   "/voice-status",
+  "/video-preflight",
   "/video-create",
   "/video-status",
+  "/video-quality",
+  "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
   "/oauth-disconnect",
@@ -920,6 +923,103 @@ function videoPrompt(task, channel) {
     .join("\n\n")
     .slice(0, 10000);
 }
+const VIDEO_V3_COST_GUARD = Object.freeze({ directorPlanAttempts: 2, fullVideoRegenerations: 1, partialSceneRegenerations: 3, publishScore: 90, premiumScore: 95 });
+function videoV3Route(task = {}) { if (task.videoRoute === "B" || task.route === "B") return "B"; return task.product && Object.keys(task.product).length ? "A" : "B"; }
+function videoV3Json(raw = "") { let text = String(raw || "").trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/i, ""); const match = text.match(/\{[\s\S]*\}/); return JSON.parse(match ? match[0] : text); }
+function videoV3Preflight(plan = {}, task = {}) { const scenes = Array.isArray(plan.scenes) ? plan.scenes.slice(0, 10) : [], issues = [], kinds = new Set(), beats = new Set(); let prev = 0, effects = 0, presenter = 0, product = 0, exchange = 0; if (!plan.hook || !plan.thesis || !plan.twist || !plan.climax || !plan.cta) issues.push("故事骨架不完整"); if (scenes.length < 7) issues.push("鏡頭不足7段"); scenes.forEach((x, i) => { const start = Number(x.start || 0), end = Number(x.end || 0), duration = end - start, type = String(x.assetType || "").toLowerCase(), beat = String(x.storyBeat || ""); if (!(duration > 0)) issues.push(`第${i+1}鏡時間錯誤`); if (start < prev - .15) issues.push(`第${i+1}鏡重疊`); if (duration > 6) issues.push(`第${i+1}鏡超過6秒`); if (!beat) issues.push(`第${i+1}鏡缺劇情節點`); else beats.add(beat); if (!x.purpose || !x.visual) issues.push(`第${i+1}鏡缺畫面目的`); if (!x.narration && !x.subtitle) issues.push(`第${i+1}鏡缺內容`); if (Array.isArray(x.effects) && x.effects.length) effects++; if (x.presenter) presenter += Math.max(0, duration); if (type) kinds.add(type); if (/product|ui|screen|asset/.test(type) || x.assetUrl) product++; if (/debate|reaction|dialogue|exchange|衝突|對話|反應/i.test(beat + " " + String(x.purpose || ""))) exchange++; prev = Math.max(prev, end); }); const total = Number(scenes.at(-1)?.end || 0); if (scenes[0] && Number(scenes[0].end || 0) > 3.5) issues.push("前三秒鉤子太慢"); if (beats.size < 4) issues.push("劇情層次不足4個"); if (effects < 4) issues.push("特效節點不足4鏡"); const route = videoV3Route(task); if (route === "A" && task.product && product < 1) issues.push("缺少真實產品/UI鏡頭"); if (route === "B" && exchange < 1) issues.push("缺少觀點交換或衝突"); return { pass: !issues.length, issues, warnings: total && presenter / total > .55 ? ["人物出鏡超過55%"] : [], plan, metrics: { totalSeconds: total, presenterSeconds: presenter, effectBeats: effects, productScenes: product, exchangeScenes: exchange, visualKinds: [...kinds] } }; }
+function videoV3DirectorPrompt(task, channel, issues = []) { const route = videoV3Route(task); return ["你是95分精品短影音總導演。先把文字分鏡審到可拍，才花影片生成額度。", `產線${route}；平台${channel}；9:16優先；約30～45秒。`, `任務：${String(task.goal || "").slice(0, 3000)}`, `既有內容：${String(task.outputs?.[channel] || task.outputs?.video || "").slice(0, 6500)}`, issues.length ? `上次退件：${issues.join("；")}，逐項修正。` : "第一次導演計畫。", "只回JSON：{route,hook,thesis,twist,climax,cta,scenes:[{id,start,end,storyBeat,purpose,visual,narration,subtitle,assetType,assetUrl,presenter,transition,effects:[],soundDesign:[],camera}]}", "7～10鏡；0～3秒鉤子；至少4劇情節點、4鏡有效特效、4類視覺；單鏡<=6秒；人物原則<=55%。", route === "A" ? "至少一鏡真實產品/UI/指定素材，不得杜撰產品畫面。" : "至少一段主持人/顧問觀點交換、反應或衝突，不可單人念稿。", "台灣自然口語；特效與SFX服務情節；完成一個具體觀點；不得編造數據。"].join("\n"); }
+async function buildVideoV3DirectorPlan(env, task, channel) { let issues = []; for (let attempt = 1; attempt <= VIDEO_V3_COST_GUARD.directorPlanAttempts; attempt++) { const out = await claude(env, "你是短影音導演，只輸出合法JSON。", videoV3DirectorPrompt(task, channel, issues), 2600); let plan; try { plan = videoV3Json(out.text); } catch { issues = ["JSON格式錯誤"]; continue; } const check = videoV3Preflight(plan, task); if (check.pass) return { ...check, attempts: attempt }; issues = check.issues; } throw Object.assign(new Error(`VIDEO_V3_PREFLIGHT_FAILED:${issues.join("；")}`), { status: 409, preflight: { pass: false, issues } }); }
+function videoV3Prompt(task, channel, preflight) { const p = preflight.plan; return ["依照以下已通過V3 Preflight的導演計畫忠實製作。不要改成單人念稿。", "目標：90分以上才可發布，95分精品母片。", `產線：${videoV3Route(task)}；平台：${channel}`, `Hook：${p.hook}`, `核心：${p.thesis}`, `轉折：${p.twist}`, `高潮：${p.climax}`, `CTA：${p.cta}`, "逐鏡JSON：", JSON.stringify(p.scenes), "繁體中文字幕、高對比、安全區；聲音卡點；真實產品素材不得被AI虛構畫面取代。"].join("\n\n").slice(0, 12000); }
+function videoV3InitialQuality(preflight) { return { version: "3.0.0", status: "awaiting_render_review", pass: false, premium: false, score: null, publishThreshold: 90, premiumThreshold: 95, hardFailures: [], preflight: { pass: true, issues: [], warnings: preflight.warnings || [] }, costGuard: { ...VIDEO_V3_COST_GUARD, fullVideoRegenerationsUsed: 0, partialSceneRegenerationsUsed: 0 } }; }
+function videoV3AutoPublishGate(job = {}) { const q = job.quality || {}; if (q.version !== "3.0.0") return { pass: false, reason: "V3品質報告缺失" }; if (Array.isArray(q.hardFailures) && q.hardFailures.length) return { pass: false, reason: "硬性退件：" + q.hardFailures.join("、") }; if (q.pass !== true || Number(q.score || 0) < 90) return { pass: false, reason: `品質未達90分（${q.score ?? "尚未評分"}）` }; return { pass: true, premium: Number(q.score) >= 95 }; }
+
+// REFERENCE_RUNTIME_V1
+function referenceRuntimeJson(raw = "") {
+  let text = String(raw || "").trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/i, "");
+  const match = text.match(/\{[\s\S]*\}/);
+  return JSON.parse(match ? match[0] : text);
+}
+function referenceMetricRegime(publishedAt) {
+  const t = Date.parse(publishedAt || "");
+  if (!Number.isFinite(t)) return "unknown";
+  return t >= Date.parse("2026-08-24T00:00:00Z") ? "public-view-starts-2026-08-24+" : "legacy-public-view-count";
+}
+async function referenceDiscover(env, query, maxResults = 5) {
+  const key = String(env.YOUTUBE_API_KEY || "").trim();
+  if (!key) throw Object.assign(new Error("REFERENCE_DISCOVERY_UNAVAILABLE:YOUTUBE_API_KEY missing"), { status: 503 });
+  const q = String(query || "").trim().slice(0, 300);
+  if (!q) throw Object.assign(new Error("REFERENCE_QUERY_REQUIRED"), { status: 400 });
+  const limit = Math.max(3, Math.min(10, Number(maxResults) || 5));
+  const p = new URLSearchParams({ part: "snippet", type: "video", q, maxResults: String(limit), order: "viewCount", regionCode: "TW", relevanceLanguage: "zh-Hant", key });
+  const sr = await fetch("https://www.googleapis.com/youtube/v3/search?" + p);
+  const sj = await sr.json().catch(() => ({}));
+  if (!sr.ok) throw Object.assign(new Error("YOUTUBE_API_" + sr.status + ":" + String(sj?.error?.message || sr.statusText).slice(0, 240)), { status: sr.status });
+  const ids = (sj.items || []).map(x => x?.id?.videoId).filter(Boolean).slice(0, limit);
+  if (!ids.length) return { status: "REFERENCE_INSUFFICIENT", candidates: [] };
+  const d = new URLSearchParams({ part: "snippet,statistics,contentDetails", id: ids.join(","), key });
+  const vr = await fetch("https://www.googleapis.com/youtube/v3/videos?" + d);
+  const vj = await vr.json().catch(() => ({}));
+  if (!vr.ok) throw Object.assign(new Error("YOUTUBE_API_" + vr.status), { status: vr.status });
+  const candidates = (vj.items || []).map(v => ({
+    videoId: String(v.id || ""),
+    title: String(v.snippet?.title || "").slice(0, 300),
+    channelTitle: String(v.snippet?.channelTitle || "").slice(0, 220),
+    publishedAt: String(v.snippet?.publishedAt || ""),
+    duration: String(v.contentDetails?.duration || ""),
+    views: Number(v.statistics?.viewCount || 0),
+    likes: v.statistics?.likeCount == null ? null : Number(v.statistics.likeCount),
+    comments: v.statistics?.commentCount == null ? null : Number(v.statistics.commentCount),
+    metricRegime: referenceMetricRegime(v.snippet?.publishedAt),
+    publicUrl: "https://www.youtube.com/watch?v=" + encodeURIComponent(v.id || "")
+  })).filter(x => x.videoId && x.views > 0).sort((a, b) => b.views - a.views);
+  return { status: candidates.length >= 3 ? "PUBLIC_EVIDENCE_READY" : "REFERENCE_INSUFFICIENT", source: "YouTube Data API v3", checkedAt: new Date().toISOString(), candidates };
+}
+async function referenceAnalyzePacket(env, packet = {}) {
+  if (packet.authorized !== true) throw Object.assign(new Error("REFERENCE_MEDIA_NOT_AUTHORIZED"), { status: 403 });
+  const frames = Array.isArray(packet.frames) ? packet.frames.slice(0, 8) : [];
+  if (frames.length < 3) return { status: "REFERENCE_EVIDENCE_INCOMPLETE", videoId: String(packet.videoId || ""), issues: ["可信影格不足3張"] };
+  const content = [];
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i] || {}, data = String(f.base64 || ""), media = String(f.mediaType || "image/jpeg");
+    if (!data || data.length >= 7000000 || !/^image\/(jpeg|png|webp)$/i.test(media)) continue;
+    content.push({ type: "text", text: "frame-" + (i + 1) + " timestamp=" + Number(f.timestampSec || 0).toFixed(2) + "s" });
+    content.push({ type: "image", source: { type: "base64", media_type: media, data } });
+  }
+  if (content.filter(x => x.type === "image").length < 3) return { status: "REFERENCE_EVIDENCE_INCOMPLETE", videoId: String(packet.videoId || ""), issues: ["有效可信影格不足3張"] };
+  const transcript = String(packet.transcript || "").slice(0, 12000), transcriptSource = String(packet.transcriptSource || "").slice(0, 200);
+  content.push({ type: "text", text: [
+    "只能根據影格、時間戳與提供的逐字稿觀察，不得猜留存、engaged views、未提供的聲音。",
+    transcript ? "可信逐字稿：\n" + transcript : "沒有可信逐字稿；聲音節奏與完整CTA填unknown。",
+    "只回JSON：{hook,firstCut,firstPayoff,storyBeats:[],conflictOrTwist,climax,presenterRatio,brollTypes:[],productProof:[],effectBeats:[],soundBeats:[],captionRhythm,cta,unknowns:[],evidenceNotes:[],confidence}"
+  ].join("\n") });
+  const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": env.ANTHROPIC_KEY, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: env.REFERENCE_VISION_MODEL || MODEL, max_tokens: 1800, system: "你是短影音結構分析師，只輸出合法JSON。", messages: [{ role: "user", content }] }) });
+  const t = await r.text();
+  if (!r.ok) throw Object.assign(new Error("REFERENCE_VISUAL_MODEL_" + r.status + ":" + t.slice(0, 240)), { status: r.status });
+  const d = JSON.parse(t), raw = (d.content || []).filter(x => x.type === "text").map(x => x.text).join("\n"), j = referenceRuntimeJson(raw);
+  const transcriptTrusted = !!transcript && !!transcriptSource;
+  return { status: "PASS", videoId: String(packet.videoId || ""), evidenceType: transcriptTrusted ? "trusted-frames-plus-transcript" : "trusted-frames", visualEvidenceCount: content.filter(x => x.type === "image").length, transcriptEvidence: { available: transcriptTrusted, source: transcriptTrusted ? transcriptSource : "" }, hook: String(j.hook || "").slice(0, 500), firstCut: String(j.firstCut || "").slice(0, 300), firstPayoff: String(j.firstPayoff || "").slice(0, 500), storyBeats: Array.isArray(j.storyBeats) ? j.storyBeats.slice(0, 10) : [], conflictOrTwist: String(j.conflictOrTwist || "").slice(0, 500), climax: String(j.climax || "").slice(0, 500), presenterRatio: j.presenterRatio == null ? null : Math.max(0, Math.min(1, Number(j.presenterRatio) || 0)), brollTypes: Array.isArray(j.brollTypes) ? j.brollTypes.slice(0, 10) : [], productProof: Array.isArray(j.productProof) ? j.productProof.slice(0, 8) : [], effectBeats: Array.isArray(j.effectBeats) ? j.effectBeats.slice(0, 12) : [], soundBeats: transcriptTrusted && Array.isArray(j.soundBeats) ? j.soundBeats.slice(0, 12) : [], captionRhythm: String(j.captionRhythm || "").slice(0, 500), cta: transcriptTrusted ? String(j.cta || "unknown").slice(0, 500) : "unknown", unknowns: Array.isArray(j.unknowns) ? j.unknowns.slice(0, 20) : [], confidence: Math.max(0, Math.min(1, Number(j.confidence) || 0)) };
+}
+async function referenceOrchestrate(env, b = {}) {
+  const discovery = b.discovery && Array.isArray(b.discovery.candidates) ? b.discovery : await referenceDiscover(env, b.query || b.task, b.maxResults || 5);
+  const packets = Array.isArray(b.references) ? b.references : [];
+  const packetById = new Map(packets.map(x => [String(x?.videoId || ""), x]));
+  const analyses = [];
+  for (const candidate of (discovery.candidates || []).slice(0, 5)) {
+    const packet = packetById.get(String(candidate.videoId || ""));
+    if (!packet) continue;
+    const analysis = await referenceAnalyzePacket(env, packet);
+    if (analysis.status === "PASS" && analysis.confidence >= .6) analyses.push(analysis);
+  }
+  if (analyses.length < 3) return { status: "REFERENCE_EVIDENCE_INCOMPLETE", discovery, analyses, issues: ["至少需要3支候選影片提供可信影格分析"] };
+  const synthesis = await claude(env, "你是Reference Analyst，只能綜合已提供分析，不得新增不存在的影片證據。只輸出合法JSON。", "請找出至少由2支不同影片共同支持的結構規律。只回JSON：{commonPatterns:[],hookPatterns:[],storyPatterns:[],brollPatterns:[],effectPatterns:[],soundPatterns:[],ctaPatterns:[],evidenceMap:[{pattern,videoIds:[]}],confidence}.\n分析資料：" + JSON.stringify(analyses).slice(0, 22000), 1800);
+  const s = referenceRuntimeJson(synthesis.text), evidenceMap = Array.isArray(s.evidenceMap) ? s.evidenceMap.filter(x => new Set(Array.isArray(x.videoIds) ? x.videoIds : []).size >= 2) : [];
+  const commonPatterns = evidenceMap.map(x => String(x.pattern || "")).filter(Boolean).slice(0, 12);
+  const pass = commonPatterns.length >= 3;
+  const sources = (discovery.candidates || []).filter(x => analyses.some(a => a.videoId === x.videoId)).slice(0, 10);
+  const regimes = [...new Set(sources.map(x => x.metricRegime).filter(Boolean))];
+  return { version: "2.2.0", status: pass ? "PASS" : "REFERENCE_EVIDENCE_INCOMPLETE", sampleCount: sources.length, sources, commonPatterns, hookPatterns: Array.isArray(s.hookPatterns) ? s.hookPatterns.slice(0, 8) : [], storyPatterns: Array.isArray(s.storyPatterns) ? s.storyPatterns.slice(0, 8) : [], ctaPatterns: Array.isArray(s.ctaPatterns) ? s.ctaPatterns.slice(0, 8) : [], evidenceMap, analyses, metricRegime: regimes.length === 1 ? regimes[0] : "mixed", confidence: Math.max(0, Math.min(1, Number(s.confidence) || 0)), checkedAt: new Date().toISOString(), originalityGuard: "只學跨影片共同結構，不複製單一影片腳本、角色、口頭禪或獨特橋段。", inaccessibleMetrics: ["creatorRetention", "stayedToWatch", "engagedViews"], issues: pass ? [] : ["跨影片共同結構證據不足3項"] };
+}
+
 async function videoRateLimit(env, workspaceId) {
   const day = new Date().toISOString().slice(0, 10);
   for (const [key, limit] of [
@@ -965,6 +1065,39 @@ async function heygen(env, path, init = {}) {
   }
   return data?.data || data;
 }
+async function videoPreflight(req, env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const channel = String(b.channel || "");
+  if (!["video", "tiktok", "youtube"].includes(channel))
+    throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId);
+  if (
+    !record.task.channels?.includes(channel) ||
+    !record.task.outputs?.[channel]
+  )
+    throw Object.assign(new Error("這個任務沒有該平台的影片製作包"), {
+      status: 409,
+    });
+
+  // Deliberately stop before videoRateLimit() and heygen(). The owner can
+  // review the inexpensive text/storyboard stage before spending video credits.
+  const director = await buildVideoV3DirectorPlan(env, record.task, channel);
+  return {
+    ok: true,
+    pass: true,
+    stage: "video_preflight",
+    channel,
+    route: videoV3Route(record.task),
+    directorPlan: director.plan,
+    issues: director.issues,
+    warnings: director.warnings,
+    metrics: director.metrics,
+    attempts: director.attempts,
+    heygenCalled: false,
+    estimatedHeygenSpend: false,
+    nextAction: "awaiting_render_approval",
+  };
+}
 async function videoCreate(req, env, b) {
   await requireVideoAccess(env, b.workspaceId);
   const channel = String(b.channel || "");
@@ -1006,9 +1139,15 @@ async function createVideoForRecord(env, record, channel) {
       new Error(`請先在營運總部完成「${presenterName}」的人物設定，避免產生陌生人物`),
       { status: 409 },
     );
+  // V3 COST GUARD: spend text tokens first; HeyGen credits are touched only after preflight passes.
+  if (videoV3Route(record.task) === "B" && !record.task.referenceBrief && record.task.referenceEvidence) {
+    const generatedReference = await referenceOrchestrate(env, { task: record.task.goal, ...record.task.referenceEvidence });
+    if (generatedReference.status === "PASS") record.task.referenceBrief = generatedReference;
+  }
+  const director = await buildVideoV3DirectorPlan(env, record.task, channel);
   await videoRateLimit(env, record.id);
   const request = {
-    prompt: videoPrompt(record.task, channel),
+    prompt: videoV3Prompt(record.task, channel, director),
     avatar_id: avatar.selectedLookId,
     mode: "generate",
     orientation: channel === "youtube" ? "landscape" : "portrait",
@@ -1034,6 +1173,9 @@ async function createVideoForRecord(env, record, channel) {
     sessionId: result.session_id,
     videoId: result.video_id || null,
     status: result.status || "generating",
+    directorPlan: director.plan,
+    preflight: { pass: director.pass, issues: director.issues, warnings: director.warnings, metrics: director.metrics, attempts: director.attempts },
+    quality: videoV3InitialQuality(director),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -1079,6 +1221,68 @@ async function videoStatus(req, env, b) {
   await saveVideoJob(env, record, channel, job);
   return { ok: true, job };
 }
+// TRUSTED_VISUAL_QC_V1
+function videoV3QualityScore(report = {}) {
+  const weights = { hook:12, story:15, effects:15, substance:15, visualRhythm:12, faceNaturalness:10, voiceNaturalness:8, captions:6, brandFit:7 };
+  let score=0;
+  for(const [k,w] of Object.entries(weights)){
+    const v=Math.max(0,Math.min(100,Number(report[k]||0)));
+    score += v*w/100;
+  }
+  return Math.round(score);
+}
+function videoV3VisualScore(report = {}) {
+  const weights={photorealism:18,textureDetail:12,lighting:12,motionCoherence:15,physicalPlausibility:10,identityConsistency:12,cinematicComposition:10,artifactControl:11};
+  let score=0;
+  for(const [k,w] of Object.entries(weights)){
+    const v=Math.max(0,Math.min(100,Number(report[k]||0)));
+    score += v*w/100;
+  }
+  return Math.round(score);
+}
+function videoV3HardFailures(report={}) {
+  const allowed=new Set(["face_break","lip_sync","wrong_identity","blank_frame","broken_audio","unsafe_caption","no_story","no_effect_design","plastic_ai_look","texture_failure","motion_morphing","physics_break","hand_object_deform","background_melting","identity_drift","text_logo_corruption","product_ui_corruption","severe_flicker","subject_edge_warp","unnatural_depth_of_field"]);
+  return [...new Set((Array.isArray(report.hardFailures)?report.hardFailures:[]).map(String).filter(x=>allowed.has(x)))];
+}
+function videoV3TrustedGate(job={}) {
+  const q=job.quality||{};
+  if(q.version!=="3.0.0") return {pass:false,reason:"V3品質報告缺失"};
+  if(q.referenceGate?.required===true&&q.referenceGate?.pass!==true) return {pass:false,reason:"Reference Gate 未通過"};
+  if(q.reviewSource!=="trusted_server") return {pass:false,reason:"尚未完成伺服器可信 QC"};
+  if(q.visual?.trusted!==true) return {pass:false,reason:"尚未完成可信 Visual QC"};
+  if(q.visual?.pass!==true||Number(q.visual?.score||0)<90) return {pass:false,reason:`Visual QC 未達90分（${q.visual?.score??"尚未評分"}）`};
+  if(Array.isArray(q.hardFailures)&&q.hardFailures.length) return {pass:false,reason:"硬性退件："+q.hardFailures.join("、")};
+  if(q.pass!==true||Number(q.score||0)<90) return {pass:false,reason:`製作品質未達90分（${q.score??"尚未評分"}）`};
+  return {pass:true,premium:Number(q.score)>=95&&Number(q.visual.score)>=90,reason:Number(q.score)>=95?"95分精品母片":"90分以上可發布"};
+}
+async function videoQuality(req, env, b) {
+  await requireVideoAccess(env,b.workspaceId);
+  const channel=String(b.channel||"");
+  if(!["video","tiktok","youtube"].includes(channel)) throw Object.assign(new Error("不支援的影片平台"),{status:400});
+  const record=await hqTaskForVideo(env,b.workspaceId,b.taskId), old=record.task.videoJobs?.[channel];
+  if(!old) throw Object.assign(new Error("這個平台尚未建立影片"),{status:404});
+  if(old.status!=="completed"||!old.videoUrl) throw Object.assign(new Error("影片尚未完成，不能評分"),{status:409});
+  const report=b.report&&typeof b.report==="object"?b.report:{};
+  const manualReview={source:"manual_client",score:videoV3QualityScore(report),hardFailures:videoV3HardFailures(report),notes:String(report.notes||"").slice(0,3000),reviewedAt:Date.now()};
+  const job={...old,manualReview,updatedAt:Date.now()};
+  await saveVideoJob(env,record,channel,job);
+  return {ok:true,manualReview,autoPublishUnlocked:false,gate:videoV3TrustedGate(job)};
+}
+async function applyVideoV3TrustedQualityReview(env, record, channel, trustedReport={}) {
+  const old=record.task.videoJobs?.[channel];
+  if(!old||old.status!=="completed"||!old.videoUrl) throw Object.assign(new Error("影片尚未完成，不能做可信 QC"),{status:409});
+  if(trustedReport.source!=="server_visual_qc") throw Object.assign(new Error("TRUSTED_QC_SOURCE_REQUIRED"),{status:403});
+  const production=trustedReport.production&&typeof trustedReport.production==="object"?trustedReport.production:{};
+  const visual=trustedReport.visual&&typeof trustedReport.visual==="object"?trustedReport.visual:{};
+  const hardFailures=videoV3HardFailures({hardFailures:[...(Array.isArray(production.hardFailures)?production.hardFailures:[]),...(Array.isArray(visual.hardFailures)?visual.hardFailures:[])]});
+  const score=videoV3QualityScore(production);
+  const visualScore=videoV3VisualScore(visual);
+  const quality={...(old.quality||{}),version:"3.0.0",status:"trusted_reviewed",reviewSource:"trusted_server",score,pass:score>=90&&!hardFailures.length,premium:score>=95&&visualScore>=90&&!hardFailures.length,hardFailures,reviewedAt:Date.now(),visual:{trusted:true,score:visualScore,pass:visualScore>=90&&!hardFailures.length,sampleCount:Number(visual.sampleCount||0),model:String(visual.model||"").slice(0,120),notes:String(visual.notes||"").slice(0,2000)},productionDimensions:production};
+  const job={...old,quality,updatedAt:Date.now()};
+  await saveVideoJob(env,record,channel,job);
+  return {job,quality,gate:videoV3TrustedGate(job)};
+}
+
 const PUBLISH_PROVIDERS = new Set(["youtube", "tiktok"]);
 function publishProvider(value) {
   const provider = String(value || "").toLowerCase();
@@ -1367,6 +1571,10 @@ async function publishVideo(env, b) {
   const videoJob = task.videoJobs?.[channel] || (provider === "youtube" ? task.videoJobs?.video : null);
   if (videoJob?.status !== "completed" || !videoJob.videoUrl)
     throw Object.assign(new Error("這個平台的 MP4 尚未完成"), { status: 409 });
+  if (task.approvalMode === "auto") {
+    const gate=videoV3TrustedGate(videoJob);
+    if(!gate.pass) throw Object.assign(new Error("自動發布已被可信 V3 QC 擋下："+gate.reason),{status:409});
+  }
   let token = await getPublisher(env, record.id, provider);
   if (!token) throw Object.assign(new Error(`請先連接 ${provider === "youtube" ? "YouTube" : "TikTok"} 帳號`), { status: 409 });
   const privacy = String(b.privacy || (provider === "youtube" ? "private" : ""));
@@ -1669,6 +1877,11 @@ async function hqProcessAutoPublish(env) {
             currentVideo = checked.job;
           }
           if (currentVideo?.status !== "completed" || !currentVideo.videoUrl) continue;
+          const qualityGate=videoV3TrustedGate(currentVideo);
+          if(!qualityGate.pass){
+            await env.MONITOR.put(`hq:auto-publish-hold:${workspaceId}:${task.id}:${provider}`,JSON.stringify({at:Date.now(),reason:qualityGate.reason}),{expirationTtl:604800});
+            continue;
+          }
           const privacy = String(config.publishPrivacy?.[provider] || (provider === "youtube" ? "private" : ""));
           if (provider === "tiktok" && !privacy) continue;
           await publishVideo(env, { workspaceId, taskId: task.id, provider, privacy });
@@ -1751,10 +1964,16 @@ export default {
         return json(await voiceCreate(env, b), 200, H);
       if (url.pathname === "/voice-status")
         return json(await voiceStatus(env, b), 200, H);
+      if (url.pathname === "/video-preflight")
+        return json(await videoPreflight(req, env, b), 200, H);
       if (url.pathname === "/video-create")
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
         return json(await videoStatus(req, env, b), 200, H);
+      if (url.pathname === "/video-quality")
+        return json(await videoQuality(req, env, b), 200, H);
+      if (url.pathname === "/reference-orchestrate")
+        return json(await referenceOrchestrate(env, b), 200, H);
       if (url.pathname === "/publish-config")
         return json(await publishConfig(env, b), 200, H);
       if (url.pathname === "/oauth-start")

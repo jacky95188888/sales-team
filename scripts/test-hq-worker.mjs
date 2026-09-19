@@ -85,6 +85,8 @@ assert.deepEqual(JSON.parse(await env.MONITOR.get("hq:workspaces")), [workspaceI
 
 const nativeFetch = globalThis.fetch;
 let videoAgentRequest = null;
+let heygenVideoCreateCalls = 0;
+let directorMode = "valid";
 globalThis.fetch = async (input, init) => {
   if (String(input).endsWith("/v3/users/me")) {
     return new Response(JSON.stringify({ data: { id: "user_test", billing_type: "wallet", wallet: { currency: "credits", remaining_balance: 30 } } }), {
@@ -137,6 +139,7 @@ globalThis.fetch = async (input, init) => {
     });
   }
   if (String(input).endsWith("/v3/video-agents") && init?.method === "POST") {
+    heygenVideoCreateCalls++;
     videoAgentRequest = JSON.parse(init.body);
     return new Response(JSON.stringify({ data: { session_id: "sess_test", status: "generating", video_id: null } }), {
       status: 200,
@@ -164,7 +167,28 @@ globalThis.fetch = async (input, init) => {
   if (String(input).includes("api.anthropic.com")) {
     const request = JSON.parse(init.body);
     const prompt = request.messages?.[0]?.content || "";
-    const text = String(prompt).includes("只回 JSON")
+    const isVideoDirector = String(request.system || "").includes("短影音導演");
+    const director = {
+      route: "B",
+      hook: "三秒提出關鍵問題",
+      thesis: "展示自動化真正節省的步驟",
+      twist: "顧問提出反方疑問",
+      climax: "用產品操作證明結果",
+      cta: "看完預審再決定是否產片",
+      scenes: [
+        { id: "s1", start: 0, end: 3, storyBeat: "hook", purpose: "提出問題", visual: "問題字卡", narration: "先別急著花影片額度", subtitle: "先審再產", assetType: "title", effects: ["push_zoom"] },
+        { id: "s2", start: 3, end: 7, storyBeat: "setup", purpose: "主持人說明", visual: "主持人中景", narration: "先把故事和分鏡審清楚", subtitle: "文字預審", assetType: "presenter", presenter: "王小明", effects: ["caption_pop"] },
+        { id: "s3", start: 7, end: 11, storyBeat: "proof", purpose: "展示流程", visual: "流程卡片", narration: "不合格就直接退回", subtitle: "退件不產片", assetType: "ui", effects: ["ui_fly_in"] },
+        { id: "s4", start: 11, end: 15, storyBeat: "debate", purpose: "顧問觀點交換", visual: "左右分割討論", narration: "真的能避免浪費嗎", subtitle: "先驗證", assetType: "dialogue", effects: ["split_screen"] },
+        { id: "s5", start: 15, end: 19, storyBeat: "twist", purpose: "揭露零呼叫", visual: "HeyGen 計數為零", narration: "測試會證明沒有呼叫 HeyGen", subtitle: "HeyGen 0 次", assetType: "metric" },
+        { id: "s6", start: 19, end: 23, storyBeat: "proof", purpose: "展示產品畫面", visual: "真實操作畫面", narration: "通過後仍先等待批准", subtitle: "等待批准", assetType: "product_ui" },
+        { id: "s7", start: 23, end: 27, storyBeat: "climax", purpose: "顯示決策", visual: "批准或退回按鈕", narration: "由你決定是否消耗額度", subtitle: "你來決定", assetType: "decision" },
+        { id: "s8", start: 27, end: 31, storyBeat: "cta", purpose: "行動收尾", visual: "品牌收尾卡", narration: "確認後才開始產片", subtitle: "確認後產片", assetType: "brand" },
+      ],
+    };
+    const text = isVideoDirector
+      ? directorMode === "valid" ? JSON.stringify(director) : "not-json"
+      : String(prompt).includes("只回 JSON")
       ? JSON.stringify({
           strategy: "今日測試策略",
           outputs: { thread: "Threads 成品", fb: "FB 成品" },
@@ -226,20 +250,49 @@ task.production = { brandStyle: "品牌藍與暖金、清楚圖解", callToActio
 task.assets = [uploadedAsset.asset];
 task.updatedAt = 3;
 await post("/hq-tasks", { action: "upsert", workspaceId, task });
+
+directorMode = "invalid";
+const rejectedPreflight = await request("/video-preflight", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+});
+assert.equal(rejectedPreflight.response.status, 409);
+assert.match(rejectedPreflight.data.error, /VIDEO_V3_PREFLIGHT_FAILED/);
+assert.equal(heygenVideoCreateCalls, 0, "rejected preflight must not call HeyGen");
+assert.equal(await env.MONITOR.get(`hq:video-usage:${new Date().toISOString().slice(0, 10)}:${workspaceId}`), null);
+
+directorMode = "valid";
+const passedPreflight = await post("/video-preflight", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+});
+assert.equal(passedPreflight.pass, true);
+assert.equal(passedPreflight.stage, "video_preflight");
+assert.equal(passedPreflight.directorPlan.scenes.length, 8);
+assert.equal(passedPreflight.heygenCalled, false);
+assert.equal(passedPreflight.estimatedHeygenSpend, false);
+assert.equal(passedPreflight.nextAction, "awaiting_render_approval");
+assert.equal(heygenVideoCreateCalls, 0, "passed preflight must still not call HeyGen");
+assert.equal(await env.MONITOR.get(`hq:video-usage:${new Date().toISOString().slice(0, 10)}:${workspaceId}`), null);
+
 const createdVideo = await post("/video-create", {
   workspaceId,
   taskId: task.id,
   channel: "tiktok",
 });
 assert.equal(createdVideo.job.sessionId, "sess_test");
+assert.equal(createdVideo.job.preflight.pass, true);
+assert.equal(createdVideo.job.directorPlan.scenes.length, 8);
+assert.equal(createdVideo.job.quality.status, "awaiting_render_review");
+assert.equal(heygenVideoCreateCalls, 1);
 assert.equal(videoAgentRequest.avatar_id, "look_style");
 assert.equal(videoAgentRequest.voice_id, "voice_test");
 assert.equal(videoAgentRequest.files[0].url, "https://files.heygen.ai/material.jpg");
-assert.match(videoAgentRequest.prompt, /創作者親自陳述/);
-assert.match(videoAgentRequest.prompt, /每 3～5 秒/);
-assert.match(videoAgentRequest.prompt, /王小明/);
-assert.match(videoAgentRequest.prompt, /品牌藍與暖金/);
-assert.match(videoAgentRequest.prompt, /人物出鏡總長約 10 秒/);
+assert.match(videoAgentRequest.prompt, /已通過V3 Preflight/);
+assert.match(videoAgentRequest.prompt, /先別急著花影片額度/);
+assert.match(videoAgentRequest.prompt, /HeyGen 計數為零/);
 assert.doesNotMatch(videoAgentRequest.prompt, /天衡深藍金/);
 const finishedVideo = await post("/video-status", {
   workspaceId,

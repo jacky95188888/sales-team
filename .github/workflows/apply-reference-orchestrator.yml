@@ -1,0 +1,54 @@
+name: Apply Reference Orchestrator
+
+on:
+  push:
+    branches: [video-quality-v3-clean]
+    paths:
+      - scripts/patch-reference-orchestrator.mjs
+      - .github/workflows/apply-reference-orchestrator.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: video-quality-v3-clean
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply Reference runtime patch
+        run: node scripts/patch-reference-orchestrator.mjs
+      - name: Syntax check
+        run: node --check sales-team-worker.js
+      - name: Verify Reference route and pre-spend ordering
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('sales-team-worker.js','utf8');
+          if(!s.includes('"/reference-orchestrate"')) throw new Error('reference route missing');
+          if(!s.includes('REFERENCE_RUNTIME_V1')) throw new Error('reference runtime marker missing');
+          if(!s.includes('referenceOrchestrate(env, b)')) throw new Error('reference handler missing');
+          const fn=s.indexOf('async function createVideoForRecord');
+          const ref=s.indexOf('referenceOrchestrate(env, { task: record.task.goal',fn);
+          const director=s.indexOf('buildVideoV3DirectorPlan(env, record.task, channel)',fn);
+          const hey=s.indexOf('await heygen(env, "/v3/video-agents"',fn);
+          if(!(fn>=0 && ref>fn && director>ref && hey>director)) throw new Error('reference -> director -> HeyGen ordering failed');
+          console.log('Reference ordering OK');
+          NODE
+      - name: Commit integrated Worker
+        run: |
+          if git diff --quiet -- sales-team-worker.js; then
+            echo 'Reference runtime already integrated'; exit 0;
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add sales-team-worker.js
+          git commit -m 'Integrate trusted Reference orchestrator before V3 director'
+          git push origin HEAD:video-quality-v3-clean
