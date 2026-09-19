@@ -25,6 +25,7 @@ const ROUTES = new Set([
   "/media-assets",
   "/voice-create",
   "/voice-status",
+  "/video-preflight",
   "/video-create",
   "/video-status",
   "/video-quality",
@@ -1064,6 +1065,39 @@ async function heygen(env, path, init = {}) {
   }
   return data?.data || data;
 }
+async function videoPreflight(req, env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const channel = String(b.channel || "");
+  if (!["video", "tiktok", "youtube"].includes(channel))
+    throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId);
+  if (
+    !record.task.channels?.includes(channel) ||
+    !record.task.outputs?.[channel]
+  )
+    throw Object.assign(new Error("這個任務沒有該平台的影片製作包"), {
+      status: 409,
+    });
+
+  // Deliberately stop before videoRateLimit() and heygen(). The owner can
+  // review the inexpensive text/storyboard stage before spending video credits.
+  const director = await buildVideoV3DirectorPlan(env, record.task, channel);
+  return {
+    ok: true,
+    pass: true,
+    stage: "video_preflight",
+    channel,
+    route: videoV3Route(record.task),
+    directorPlan: director.plan,
+    issues: director.issues,
+    warnings: director.warnings,
+    metrics: director.metrics,
+    attempts: director.attempts,
+    heygenCalled: false,
+    estimatedHeygenSpend: false,
+    nextAction: "awaiting_render_approval",
+  };
+}
 async function videoCreate(req, env, b) {
   await requireVideoAccess(env, b.workspaceId);
   const channel = String(b.channel || "");
@@ -1930,6 +1964,8 @@ export default {
         return json(await voiceCreate(env, b), 200, H);
       if (url.pathname === "/voice-status")
         return json(await voiceStatus(env, b), 200, H);
+      if (url.pathname === "/video-preflight")
+        return json(await videoPreflight(req, env, b), 200, H);
       if (url.pathname === "/video-create")
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
