@@ -22,6 +22,7 @@ const ROUTES = new Set([
   "/threads-growth/discover",
   "/threads-growth/draft",
   "/threads-growth/approve",
+  "/threads-growth/test-publish",
   "/threads-growth/publish",
   "/threads-growth/metrics",
   "/threads-growth/learn",
@@ -104,11 +105,27 @@ async function threadsGrowth(env, path, b) {
     await env.MONITOR.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
     return { stage: "approve", draft: record };
   }
+  if (path === "/threads-growth/test-publish") {
+    const id = String(b.draftId || "").slice(0, 100), key = "threads:growth:draft:" + id;
+    const record = JSON.parse((await env.MONITOR.get(key)) || "null");
+    if (!record) throw Object.assign(new Error("DRAFT_NOT_FOUND"), { status: 404 });
+    if (record.status !== "approved") throw Object.assign(new Error("THREADS_APPROVAL_REQUIRED"), { status: 409 });
+    // This is deliberately a no-network dry run: it proves the selected, approved
+    // text is valid and records the exact payload without creating a public post.
+    const text = String(record.post || "").trim();
+    if (!text || text.length > 5000) throw Object.assign(new Error("THREADS_TEXT_INVALID"), { status: 400 });
+    const test = { draftId: id, textLength: text.length, mediaType: "TEXT", testedAt: Date.now(), result: "ready_for_official_publish" };
+    await env.MONITOR.put("threads:growth:test:" + id, JSON.stringify(test), { expirationTtl: 2592000 });
+    record.lastTestedAt = test.testedAt; record.updatedAt = test.testedAt;
+    await env.MONITOR.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+    return { stage: "test-publish", ok: true, dryRun: true, test, message: "安全測試完成：未呼叫 Threads、未建立公開貼文。" };
+  }
   if (path === "/threads-growth/publish") {
     const id = String(b.draftId || "").slice(0, 100), key = "threads:growth:draft:" + id;
     const record = JSON.parse((await env.MONITOR.get(key)) || "null");
     if (!record) throw Object.assign(new Error("DRAFT_NOT_FOUND"), { status: 404 });
     if (record.status !== "approved") throw Object.assign(new Error("THREADS_APPROVAL_REQUIRED"), { status: 409 });
+    if (!config.livePublishEnabled) throw Object.assign(new Error("THREADS_LIVE_PUBLISH_DISABLED"), { status: 409 });
     const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
     const accessToken = auth?.accessToken || env.THREADS_ACCESS_TOKEN;
     const userId = auth?.userId || env.THREADS_USER_ID;
