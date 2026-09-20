@@ -22,6 +22,16 @@ const requiredRoutes = [
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/threads-growth/config",
+  "/threads-growth/discover",
+  "/threads-growth/draft",
+  "/threads-growth/approve",
+  "/threads-growth/test-publish",
+  "/threads-growth/publish",
+  "/threads-growth/metrics",
+  "/threads-growth/learn",
+  "/threads-growth/oauth-start",
+  "/threads-growth/oauth/callback",
   "/hq-config",
   "/hq-tasks",
   "/video-config",
@@ -85,6 +95,9 @@ assert.match(worker, /config\.autoVideoEnabled === true/);
 assert.match(worker, /request\.voice_id = voice\.id/);
 assert.match(worker, /request\.files = files/);
 assert.match(worker, /嚴禁超過35秒/);
+assert.match(worker, /dryRun: true/);
+assert.match(worker, /THREADS_LIVE_PUBLISH_DISABLED/);
+assert.match(worker, /threads_content_publish/);
 
 assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");
@@ -103,6 +116,11 @@ assert.deepEqual(config.secrets?.optional, [
   "YOUTUBE_CLIENT_SECRET",
   "TIKTOK_CLIENT_KEY",
   "TIKTOK_CLIENT_SECRET",
+  "THREADS_APP_ID",
+  "THREADS_APP_SECRET",
+  "THREADS_REDIRECT_URI",
+  "THREADS_ACCESS_TOKEN",
+  "THREADS_USER_ID",
 ]);
 
 const filesToScan = [
