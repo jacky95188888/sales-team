@@ -31,9 +31,19 @@
 - POST /threads-growth/discover：找候選題目。
 - POST /threads-growth/draft：產 3 個鉤子與完整 Threads 草稿。
 - POST /threads-growth/approve：人工批准待發布稿。
-- POST /threads-growth/publish：經官方 Threads 發布授權後送出文章。
+- POST /threads-growth/test-publish：安全乾跑；驗證已批准的文字與發布 payload，但**不呼叫 Threads、絕不建立公開貼文**。
+- POST /threads-growth/publish：經官方 Threads 發布授權後送出文章；還必須先在 config 設定 `livePublishEnabled: true`，預設關閉。
 - POST /threads-growth/metrics：保存／同步可取得的貼文成效。
 - POST /threads-growth/learn：根據歷史表現產生下一輪內容權重。
 
+## 第一個安全測試入口
+依序呼叫 `discover` → `draft` → `approve` → `test-publish`。最後一步回傳 `dryRun: true` 才算通過，代表完整文字產線已驗證、但尚未對外發文。
+
+正式發布前才需要：
+1. 在 Meta Developers 建立並設定 Threads App，Redirect URI 必須是 Worker 的 `/threads-growth/oauth/callback`。
+2. 在 Worker 設定 `THREADS_APP_ID`、`THREADS_APP_SECRET`、`THREADS_REDIRECT_URI`，並綁定 `MONITOR` KV。
+3. 呼叫 `/threads-growth/oauth-start`，完成官方 OAuth。
+4. 把 config 的 `livePublishEnabled` 明確改成 `true`，才可呼叫 `publish`。
+
 ## 完成定義
-第一階段不是「能生成 Threads 文」就算完成，而是至少跑通：選題 → 成文 → 審核 → 發布 → 紀錄 → 下一輪調整。
+第一階段不是「能生成 Threads 文」就算完成，而是至少跑通：選題 → 成文 → 審核 → 安全測試 → 官方授權發布 → 紀錄 → 下一輪調整。
