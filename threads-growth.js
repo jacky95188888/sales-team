@@ -24,6 +24,9 @@ export function normalizeThreadsConfig(input = {}) {
     postsPerDay: Math.min(4, Math.max(1, Number(input.postsPerDay || 1))),
     cooldownHours: Math.min(168, Math.max(12, Number(input.cooldownHours || 48))),
     explorationRate: Math.min(0.5, Math.max(0.1, Number(input.explorationRate || 0.25))),
+    // Real publishing stays disabled until the account owner explicitly enables it.
+    // This keeps the first end-to-end verification free of accidental public posts.
+    livePublishEnabled: input.livePublishEnabled === true,
   };
 }
 
