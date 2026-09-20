@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
+const threadsSource = readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8");
+const threadsModuleUrl = `data:text/javascript;base64,${Buffer.from(threadsSource).toString("base64")}`;
+const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8")
+  .replace('"./threads-growth.js"', JSON.stringify(threadsModuleUrl));
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 const worker = (await import(moduleUrl)).default;
 
