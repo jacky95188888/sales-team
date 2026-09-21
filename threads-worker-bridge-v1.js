@@ -9,6 +9,7 @@ import {
   threadsDraftReply,
   threadsPublishReply,
   threadsPublishPost,
+  threadsPreviewPost,
   threadsCollectPostMetrics,
 } from "./threads-service-v1.js";
 
@@ -106,6 +107,7 @@ export async function threadsRoute(env, body, askAi) {
   if (action === "discover") return threadsDiscover(env, id, token, body);
   if (action === "evaluate") return threadsEvaluateCandidate(env, id, body.candidate, askAi);
   if (action === "draft-reply") return threadsDraftReply(env, id, body.candidate, body.decision, askAi);
+  if (action === "publish-preview") return { authorization: { connected: true, provider: PROVIDER }, ...threadsPreviewPost(body) };
   if (action === "publish-reply") return threadsPublishReply(env, id, token, body.candidate, body.decision, body.reply);
   if (action === "publish-post") return threadsPublishPost(env, id, token, body);
   if (action === "collect-metrics") return threadsCollectPostMetrics(env, id, token, body.threadId, body);

@@ -6,8 +6,17 @@ on:
       - main
     paths:
       - sales-team-worker.js
+      - sales-team-worker-v2.js
+      - threads-*.js
+      - growth-*.js
+      - engagement-engine-v1.js
       - hq-patch.js
       - wrangler.jsonc
+      - package.json
+      - scripts/check-worker.mjs
+      - scripts/test-growth-run.mjs
+      - scripts/test-growth-worker-v2.mjs
+      - scripts/test-threads-preview.mjs
       - .github/workflows/deploy-worker.yml
   workflow_dispatch:
     inputs:
@@ -37,7 +46,8 @@ jobs:
       - name: Validate source and configuration
         run: |
           node --check sales-team-worker.js
-          node scripts/check-worker.mjs
+          node --check sales-team-worker-v2.js
+          npm test
 
       - name: Require protected credentials
         env:

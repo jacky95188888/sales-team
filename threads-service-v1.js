@@ -92,6 +92,29 @@ export async function threadsPublishPost(env, workspaceId, token, draft = {}) {
   return { published, record };
 }
 
+// A preflight is intentionally local-only: it validates the exact text that
+// would be sent after owner approval without creating a Threads container or
+// touching any Meta endpoint.
+export function threadsPreviewPost(draft = {}) {
+  const body = txt(draft.text, 5000);
+  if (!body) throw Object.assign(new Error("THREADS_TEXT_REQUIRED"), { status: 400 });
+  return {
+    preview: {
+      platform: "threads",
+      topic: txt(draft.topic || body.slice(0, 160), 300),
+      hookType: txt(draft.hookType, 100),
+      format: "text",
+      text: body,
+      replyControl: txt(draft.replyControl, 80) || null,
+    },
+    safe: {
+      publicPostCreated: false,
+      threadsApiCalled: false,
+      nextAction: "Owner confirmation is required before publish-post.",
+    },
+  };
+}
+
 export async function threadsCollectPostMetrics(env, workspaceId, token, threadId, meta = {}) {
   const raw = await threadsInsights(token, threadId);
   const metrics = normalizeThreadsInsights(raw);

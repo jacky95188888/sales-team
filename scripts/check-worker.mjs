@@ -6,22 +6,34 @@ const workerV2 = readFileSync(new URL("../sales-team-worker-v2.js", import.meta.
 const threadsBridge = readFileSync(new URL("../threads-worker-bridge-v1.js", import.meta.url), "utf8");
 const threadsService = readFileSync(new URL("../threads-service-v1.js", import.meta.url), "utf8");
 const threadsAdapter = readFileSync(new URL("../threads-adapter-v1.js", import.meta.url), "utf8");
+const growthConsole = readFileSync(new URL("../growth-console-v1.js", import.meta.url), "utf8");
 const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
 const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
 
 const requiredRoutes = ["/opinions","/collect","/deepdive","/review","/execute","/content","/summary","/finalize","/vision-stats","/vision-reply","/algo","/monitor-config","/monitor-subscribe","/monitor-notes","/hq-config","/hq-tasks","/video-config","/video-usage","/avatar-create","/avatar-status","/media-assets","/voice-create","/voice-status","/video-create","/video-status","/publish-config","/oauth-start","/oauth-disconnect","/oauth/youtube/callback","/oauth/tiktok/callback","/publish-video","/publish-status"];
 for (const route of requiredRoutes) assert.ok(worker.includes(`"${route}"`), `Missing Worker route: ${route}`);
 
-const threadsRoutes = ["/threads-config","/threads-oauth-start","/threads-disconnect","/threads-action","/oauth/threads/callback"];
+const threadsRoutes = ["/threads-config","/threads-oauth-start","/threads-disconnect","/threads-publish-preview","/threads-action","/oauth/threads/callback"];
 for (const route of threadsRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing Threads route: ${route}`);
+const growthRoutes = ["/growth-profile", "/growth-run", "/growth-run-get", "/growth-review", "/growth-result"];
+for (const route of growthRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing Growth route: ${route}`);
+assert.match(workerV2, /web_search_20250305/);
+assert.match(workerV2, /runGrowthResearch/);
 assert.match(workerV2, /baseWorker\.fetch/);
 assert.match(workerV2, /baseWorker\.scheduled/);
+assert.match(growthConsole, /\/growth-profile/);
+assert.match(growthConsole, /\/growth-run/);
+assert.match(growthConsole, /\/growth-review/);
+assert.match(growthConsole, /\/growth-result/);
+assert.doesNotMatch(growthConsole, /\/(?:threads-)?publish(?:[-/"'])/i);
+assert.doesNotMatch(growthConsole, /HeyGen|TikTok|YouTube/i);
 assert.match(threadsBridge, /THREADS_APP_ID/);
 assert.match(threadsBridge, /THREADS_APP_SECRET/);
 assert.match(threadsBridge, /AES-GCM/);
 assert.match(threadsBridge, /expirationTtl: 600/);
 assert.match(threadsService, /threadsDiscover/);
 assert.match(threadsService, /threadsPublishReply/);
+assert.match(threadsService, /threadsPreviewPost/);
 assert.match(threadsService, /threadsCollectPostMetrics/);
 assert.match(threadsAdapter, /threadsSearch/);
 assert.match(threadsAdapter, /threadsPostText/);

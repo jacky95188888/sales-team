@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/check-worker.mjs && node scripts/test-growth-run.mjs && node scripts/test-growth-worker-v2.mjs && node scripts/test-threads-preview.mjs"
+  }
+}

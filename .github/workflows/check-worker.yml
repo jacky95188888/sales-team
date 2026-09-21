@@ -4,22 +4,40 @@ on:
   pull_request:
     paths:
       - sales-team-worker.js
+      - sales-team-worker-v2.js
+      - growth-*.js
+      - threads-*.js
+      - engagement-engine-v1.js
       - hq-patch.js
+      - index.html
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
       - scripts/test-hq-worker.mjs
+      - scripts/test-growth-run.mjs
+      - scripts/test-growth-worker-v2.mjs
+      - scripts/test-threads-preview.mjs
+      - package.json
       - .github/workflows/check-worker.yml
   push:
     branches:
       - main
     paths:
       - sales-team-worker.js
+      - sales-team-worker-v2.js
+      - growth-*.js
+      - threads-*.js
+      - engagement-engine-v1.js
       - hq-patch.js
+      - index.html
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
       - scripts/test-hq-worker.mjs
+      - scripts/test-growth-run.mjs
+      - scripts/test-growth-worker-v2.mjs
+      - scripts/test-threads-preview.mjs
+      - package.json
       - .github/workflows/check-worker.yml
 
 permissions:
@@ -36,8 +54,9 @@ jobs:
       - name: Check Worker syntax
         run: |
           node --check sales-team-worker.js
+          node --check sales-team-worker-v2.js
           node --check hq-patch.js
       - name: Check routes, bindings, schedule, and secrets
         run: |
-          node scripts/check-worker.mjs
+          npm test
           node scripts/test-hq-worker.mjs
