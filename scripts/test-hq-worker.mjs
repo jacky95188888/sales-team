@@ -372,6 +372,17 @@ assert.equal(trustedQc.quality.reviewSource, "trusted_server");
 assert.equal(trustedQc.quality.visual.trusted, true);
 assert.equal(trustedQc.gate.pass, true);
 assert.equal(heygenVideoCreateCalls, 1, "trusted QC must not create another HeyGen video");
+const anthropicKey = env.ANTHROPIC_KEY;
+delete env.ANTHROPIC_KEY;
+task.outputs.youtube = ["前三秒問題鉤子", "人物提出問題", "真實產品介面", "三步驟圖解", "前後對照", "觀點轉折", "人物結論", "產品行動引導"].join("\n");
+task.updatedAt = Date.now() + 1;
+await post("/hq-tasks", { action: "upsert", workspaceId, task });
+const localYoutubePreflight = await post("/video-preflight", { workspaceId, taskId: task.id, channel: "youtube" });
+assert.equal(localYoutubePreflight.pass, true);
+assert.equal(localYoutubePreflight.attempts, 0);
+assert.equal(localYoutubePreflight.heygenCalled, false);
+assert.equal(heygenVideoCreateCalls, 1, "local text preflight must never create another HeyGen video");
+env.ANTHROPIC_KEY = anthropicKey;
 await post("/hq-tasks", { action: "delete", workspaceId, taskId: task.id });
 
 async function runCron(cron) {
