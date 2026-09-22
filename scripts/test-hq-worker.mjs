@@ -279,6 +279,21 @@ assert.equal(passedPreflight.nextAction, "awaiting_render_approval");
 assert.equal(heygenVideoCreateCalls, 0, "passed preflight must still not call HeyGen");
 assert.equal(await env.MONITOR.get(`hq:video-usage:${new Date().toISOString().slice(0, 10)}:${workspaceId}`), null);
 
+const youtubePreflight = await post("/video-preflight", {
+  workspaceId,
+  taskId: task.id,
+  channel: "youtube",
+});
+assert.equal(youtubePreflight.pass, true);
+assert.equal(youtubePreflight.channel, "youtube");
+assert.equal(youtubePreflight.stage, "video_preflight");
+assert.match(youtubePreflight.preflightId, /^preflight_/);
+assert.equal(youtubePreflight.nextAction, "awaiting_render_approval");
+assert.equal(youtubePreflight.heygenCalled, false);
+assert.equal(youtubePreflight.estimatedHeygenSpend, false);
+assert.equal(heygenVideoCreateCalls, 0, "YouTube preflight must not call HeyGen");
+assert.equal(await env.MONITOR.get(`hq:video-usage:${new Date().toISOString().slice(0, 10)}:${workspaceId}`), null);
+
 const bypassedCreate = await request("/video-create", {
   workspaceId,
   taskId: task.id,
