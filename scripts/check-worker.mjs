@@ -105,6 +105,7 @@ assert.match(worker, /referenceOrchestrate/);
 assert.match(worker, /dryRun: true/);
 assert.match(worker, /THREADS_LIVE_PUBLISH_DISABLED/);
 assert.match(worker, /threads_content_publish/);
+assert.match(worker, /env\.PUBLISH_TOKEN_KEY \|\| env\.YOUTUBE_CLIENT_SECRET \|\| env\.ANTHROPIC_KEY/);
 
 assert.equal(config.name, "sales-team");
 assert.equal(config.main, "sales-team-worker.js");

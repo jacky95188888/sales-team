@@ -1502,7 +1502,9 @@ function decodeB64url(value) {
   return out;
 }
 async function publisherCryptoKey(env) {
-  const secret = String(env.PUBLISH_TOKEN_KEY || env.ANTHROPIC_KEY || "");
+  const secret = String(
+    env.PUBLISH_TOKEN_KEY || env.YOUTUBE_CLIENT_SECRET || env.ANTHROPIC_KEY || "",
+  );
   if (!secret)
     throw Object.assign(new Error("尚未設定發布憑證加密金鑰"), { status: 503 });
   const digest = await crypto.subtle.digest(
