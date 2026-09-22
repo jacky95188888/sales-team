@@ -115,22 +115,11 @@ assert.deepEqual(config.triggers?.crons, [
   "0 6 * * *",
   "0 13 * * *",
 ]);
-assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
-assert.deepEqual(config.secrets?.optional, [
-  "HEYGEN_API_KEY",
-  "VIDEO_QC_INTERNAL_TOKEN",
-  "PUBLISH_TOKEN_KEY",
-  "YOUTUBE_API_KEY",
-  "YOUTUBE_CLIENT_ID",
-  "YOUTUBE_CLIENT_SECRET",
-  "TIKTOK_CLIENT_KEY",
-  "TIKTOK_CLIENT_SECRET",
-  "THREADS_APP_ID",
-  "THREADS_APP_SECRET",
-  "THREADS_REDIRECT_URI",
-  "THREADS_ACCESS_TOKEN",
-  "THREADS_USER_ID",
-]);
+assert.equal(
+  config.secrets,
+  undefined,
+  "Secrets must stay in Cloudflare/GitHub Actions; Wrangler's experimental secrets field makes existing secrets deployment-blocking",
+);
 
 const filesToScan = [
   worker,
