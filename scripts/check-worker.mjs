@@ -32,9 +32,11 @@ const requiredRoutes = [
   "/voice-create",
   "/voice-status",
   "/video-preflight",
+  "/video-preflight-approve",
   "/video-create",
   "/video-status",
   "/video-quality",
+  "/internal/video-quality-trusted",
   "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
@@ -103,6 +105,7 @@ assert.deepEqual(config.triggers?.crons, [
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
 assert.deepEqual(config.secrets?.optional, [
   "HEYGEN_API_KEY",
+  "VIDEO_QC_INTERNAL_TOKEN",
   "PUBLISH_TOKEN_KEY",
   "YOUTUBE_API_KEY",
   "YOUTUBE_CLIENT_ID",

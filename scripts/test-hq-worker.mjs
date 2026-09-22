@@ -203,6 +203,7 @@ globalThis.fetch = async (input, init) => {
 };
 env.ANTHROPIC_KEY = "test-only-not-a-real-key";
 env.HEYGEN_API_KEY = "test-only-not-a-real-heygen-key";
+env.VIDEO_QC_INTERNAL_TOKEN = "test-only-qc-token";
 const preAvatarConfig = await post("/video-config", { workspaceId });
 assert.equal(preAvatarConfig.ready, false);
 assert.equal(preAvatarConfig.avatarReady, false);
@@ -273,14 +274,35 @@ assert.equal(passedPreflight.stage, "video_preflight");
 assert.equal(passedPreflight.directorPlan.scenes.length, 8);
 assert.equal(passedPreflight.heygenCalled, false);
 assert.equal(passedPreflight.estimatedHeygenSpend, false);
+assert.match(passedPreflight.preflightId, /^preflight_/);
 assert.equal(passedPreflight.nextAction, "awaiting_render_approval");
 assert.equal(heygenVideoCreateCalls, 0, "passed preflight must still not call HeyGen");
 assert.equal(await env.MONITOR.get(`hq:video-usage:${new Date().toISOString().slice(0, 10)}:${workspaceId}`), null);
+
+const bypassedCreate = await request("/video-create", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+});
+assert.equal(bypassedCreate.response.status, 409);
+assert.match(bypassedCreate.data.error, /請先批准/);
+assert.equal(heygenVideoCreateCalls, 0, "direct video-create must not call HeyGen");
+
+const approvedPreflight = await post("/video-preflight-approve", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+  preflightId: passedPreflight.preflightId,
+});
+assert.match(approvedPreflight.approvalId, /^approval_/);
+assert.equal(approvedPreflight.heygenCalled, false);
+assert.equal(heygenVideoCreateCalls, 0, "approval must not call HeyGen");
 
 const createdVideo = await post("/video-create", {
   workspaceId,
   taskId: task.id,
   channel: "tiktok",
+  approvalId: approvedPreflight.approvalId,
 });
 assert.equal(createdVideo.job.sessionId, "sess_test");
 assert.equal(createdVideo.job.preflight.pass, true);
@@ -301,6 +323,23 @@ const finishedVideo = await post("/video-status", {
 });
 assert.equal(finishedVideo.job.status, "completed");
 assert.equal(finishedVideo.job.videoUrl, "https://files.heygen.ai/test.mp4");
+const forgedTrustedQc = await request("/internal/video-quality-trusted", {
+  workspaceId, taskId: task.id, channel: "tiktok", report: {},
+});
+assert.equal(forgedTrustedQc.response.status, 403);
+const trustedQc = await post("/internal/video-quality-trusted", {
+  workspaceId,
+  taskId: task.id,
+  channel: "tiktok",
+  report: {
+    production: { hook: 96, story: 96, effects: 96, substance: 96, visualRhythm: 96, faceNaturalness: 96, voiceNaturalness: 96, captions: 96, brandFit: 96 },
+    visual: { photorealism: 96, textureDetail: 96, lighting: 96, motionCoherence: 96, physicalPlausibility: 96, identityConsistency: 96, cinematicComposition: 96, artifactControl: 96, sampleCount: 4, model: "test-visual-qc" },
+  },
+}, { "X-Video-QC-Token": "test-only-qc-token" });
+assert.equal(trustedQc.quality.reviewSource, "trusted_server");
+assert.equal(trustedQc.quality.visual.trusted, true);
+assert.equal(trustedQc.gate.pass, true);
+assert.equal(heygenVideoCreateCalls, 1, "trusted QC must not create another HeyGen video");
 await post("/hq-tasks", { action: "delete", workspaceId, taskId: task.id });
 
 async function runCron(cron) {

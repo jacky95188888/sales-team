@@ -26,9 +26,11 @@ const ROUTES = new Set([
   "/voice-create",
   "/voice-status",
   "/video-preflight",
+  "/video-preflight-approve",
   "/video-create",
   "/video-status",
   "/video-quality",
+  "/internal/video-quality-trusted",
   "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
@@ -1065,6 +1067,32 @@ async function heygen(env, path, init = {}) {
   }
   return data?.data || data;
 }
+const VIDEO_PREFLIGHT_TTL_SECONDS = 30 * 60;
+function videoPreflightKey(record, channel) {
+  return `hq:video-preflight:${record.id}:${record.task.id}:${channel}`;
+}
+function videoApprovalKey(record, channel, approvalId) {
+  return `hq:video-approval:${record.id}:${record.task.id}:${channel}:${approvalId}`;
+}
+function videoOpaqueId(prefix) {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return `${prefix}_${Array.from(bytes).map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+async function approvedVideoPreflight(env, record, channel, approvalId) {
+  const safeId = String(approvalId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100);
+  if (!safeId) throw Object.assign(new Error("請先批准已通過的文字預審，再建立付費影片"), { status: 409 });
+  const approval = JSON.parse((await env.MONITOR.get(videoApprovalKey(record, channel, safeId))) || "null");
+  if (!approval || approval.channel !== channel || approval.taskId !== record.task.id)
+    throw Object.assign(new Error("預審批准不存在、已過期或不屬於此影片任務"), { status: 409 });
+  if (approval.usedAt)
+    throw Object.assign(new Error("這份預審批准已使用，不能重複建立影片"), { status: 409 });
+  if (approval.taskUpdatedAt !== Number(record.task.updatedAt || 0))
+    throw Object.assign(new Error("任務內容已變更，請重新執行文字預審"), { status: 409 });
+  approval.usedAt = Date.now();
+  await env.MONITOR.put(videoApprovalKey(record, channel, safeId), JSON.stringify(approval), { expirationTtl: VIDEO_PREFLIGHT_TTL_SECONDS });
+  return approval;
+}
 async function videoPreflight(req, env, b) {
   await requireVideoAccess(env, b.workspaceId);
   const channel = String(b.channel || "");
@@ -1082,6 +1110,11 @@ async function videoPreflight(req, env, b) {
   // Deliberately stop before videoRateLimit() and heygen(). The owner can
   // review the inexpensive text/storyboard stage before spending video credits.
   const director = await buildVideoV3DirectorPlan(env, record.task, channel);
+  const preflightId = videoOpaqueId("preflight"), expiresAt = Date.now() + VIDEO_PREFLIGHT_TTL_SECONDS * 1000;
+  await env.MONITOR.put(videoPreflightKey(record, channel), JSON.stringify({
+    preflightId, workspaceId: record.id, taskId: record.task.id, channel,
+    taskUpdatedAt: Number(record.task.updatedAt || 0), director, createdAt: Date.now(), expiresAt,
+  }), { expirationTtl: VIDEO_PREFLIGHT_TTL_SECONDS });
   return {
     ok: true,
     pass: true,
@@ -1095,8 +1128,27 @@ async function videoPreflight(req, env, b) {
     attempts: director.attempts,
     heygenCalled: false,
     estimatedHeygenSpend: false,
+    preflightId,
+    expiresAt,
     nextAction: "awaiting_render_approval",
   };
+}
+async function videoPreflightApprove(req, env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const channel = String(b.channel || "");
+  if (!["video", "tiktok", "youtube"].includes(channel))
+    throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId);
+  const preflight = JSON.parse((await env.MONITOR.get(videoPreflightKey(record, channel))) || "null");
+  if (!preflight || preflight.preflightId !== String(b.preflightId || ""))
+    throw Object.assign(new Error("找不到可批准的文字預審，請先重新預審"), { status: 409 });
+  if (preflight.taskUpdatedAt !== Number(record.task.updatedAt || 0))
+    throw Object.assign(new Error("任務內容已變更，請重新執行文字預審"), { status: 409 });
+  const approvalId = videoOpaqueId("approval");
+  await env.MONITOR.put(videoApprovalKey(record, channel, approvalId), JSON.stringify({
+    ...preflight, approvalId, approvedAt: Date.now(), usedAt: null,
+  }), { expirationTtl: VIDEO_PREFLIGHT_TTL_SECONDS });
+  return { ok: true, stage: "render_approved", approvalId, expiresAt: preflight.expiresAt, heygenCalled: false, nextAction: "video_create" };
 }
 async function videoCreate(req, env, b) {
   await requireVideoAccess(env, b.workspaceId);
@@ -1111,9 +1163,10 @@ async function videoCreate(req, env, b) {
     throw Object.assign(new Error("這個任務沒有該平台的影片製作包"), {
       status: 409,
     });
-  return createVideoForRecord(env, record, channel);
+  const approval = await approvedVideoPreflight(env, record, channel, b.approvalId);
+  return createVideoForRecord(env, record, channel, approval);
 }
-async function createVideoForRecord(env, record, channel) {
+async function createVideoForRecord(env, record, channel, approval) {
   const old = record.task.videoJobs?.[channel];
   if (
     old &&
@@ -1126,6 +1179,9 @@ async function createVideoForRecord(env, record, channel) {
     ].includes(old.status)
   )
     return { ok: true, reused: true, job: old };
+  const director = approval?.director;
+  if (!director?.pass || !director?.plan)
+    throw Object.assign(new Error("預審資料不完整或尚未批准，請先執行文字預審"), { status: 409 });
   const profileId = creatorProfileId(record.task.presenter?.id),
     presenterName = String(record.task.presenter?.name || "目前人物").slice(0, 60),
     avatar = JSON.parse(
@@ -1144,7 +1200,6 @@ async function createVideoForRecord(env, record, channel) {
     const generatedReference = await referenceOrchestrate(env, { task: record.task.goal, ...record.task.referenceEvidence });
     if (generatedReference.status === "PASS") record.task.referenceBrief = generatedReference;
   }
-  const director = await buildVideoV3DirectorPlan(env, record.task, channel);
   await videoRateLimit(env, record.id);
   const request = {
     prompt: videoV3Prompt(record.task, channel, director),
@@ -1174,7 +1229,7 @@ async function createVideoForRecord(env, record, channel) {
     videoId: result.video_id || null,
     status: result.status || "generating",
     directorPlan: director.plan,
-    preflight: { pass: director.pass, issues: director.issues, warnings: director.warnings, metrics: director.metrics, attempts: director.attempts },
+    preflight: { pass: director.pass, issues: director.issues, warnings: director.warnings, metrics: director.metrics, attempts: director.attempts, approvedAt: approval.approvedAt, approvalId: approval.approvalId },
     quality: videoV3InitialQuality(director),
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -1281,6 +1336,26 @@ async function applyVideoV3TrustedQualityReview(env, record, channel, trustedRep
   const job={...old,quality,updatedAt:Date.now()};
   await saveVideoJob(env,record,channel,job);
   return {job,quality,gate:videoV3TrustedGate(job)};
+}
+async function requireTrustedVideoQc(req, env) {
+  const expected = String(env.VIDEO_QC_INTERNAL_TOKEN || "");
+  const received = String(req.headers.get("X-Video-QC-Token") || "");
+  if (!expected) throw Object.assign(new Error("VIDEO_QC_INTERNAL_TOKEN 尚未設定"), { status: 503 });
+  if (received.length !== expected.length) throw Object.assign(new Error("TRUSTED_QC_FORBIDDEN"), { status: 403 });
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) mismatch |= expected.charCodeAt(i) ^ received.charCodeAt(i);
+  if (mismatch) throw Object.assign(new Error("TRUSTED_QC_FORBIDDEN"), { status: 403 });
+}
+async function videoTrustedQuality(req, env, b) {
+  await requireTrustedVideoQc(req, env);
+  const channel = String(b.channel || "");
+  if (!["video", "tiktok", "youtube"].includes(channel))
+    throw Object.assign(new Error("不支援的影片平台"), { status: 400 });
+  const record = await hqTaskForVideo(env, b.workspaceId, b.taskId);
+  const result = await applyVideoV3TrustedQualityReview(env, record, channel, {
+    ...(b.report && typeof b.report === "object" ? b.report : {}), source: "server_visual_qc",
+  });
+  return { ok: true, quality: result.quality, gate: result.gate };
 }
 
 const PUBLISH_PROVIDERS = new Set(["youtube", "tiktok"]);
@@ -1966,12 +2041,16 @@ export default {
         return json(await voiceStatus(env, b), 200, H);
       if (url.pathname === "/video-preflight")
         return json(await videoPreflight(req, env, b), 200, H);
+      if (url.pathname === "/video-preflight-approve")
+        return json(await videoPreflightApprove(req, env, b), 200, H);
       if (url.pathname === "/video-create")
         return json(await videoCreate(req, env, b), 200, H);
       if (url.pathname === "/video-status")
         return json(await videoStatus(req, env, b), 200, H);
       if (url.pathname === "/video-quality")
         return json(await videoQuality(req, env, b), 200, H);
+      if (url.pathname === "/internal/video-quality-trusted")
+        return json(await videoTrustedQuality(req, env, b), 200, H);
       if (url.pathname === "/reference-orchestrate")
         return json(await referenceOrchestrate(env, b), 200, H);
       if (url.pathname === "/publish-config")
