@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
+const threadsSource = readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8");
+const threadsModuleUrl = `data:text/javascript;base64,${Buffer.from(threadsSource).toString("base64")}`;
+const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8")
+  .replace('"./threads-growth.js"', JSON.stringify(threadsModuleUrl));
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 const worker = (await import(moduleUrl)).default;
 
@@ -15,6 +18,11 @@ class MemoryKV {
 const env = { MONITOR: new MemoryKV() };
 const origin = "https://jacky95188888.github.io";
 const workspaceId = "sanbao_0123456789abcdef0123456789abcdef0123";
+
+// A dry-run must prove the approved text path without making any network request.
+await env.MONITOR.put("threads:growth:draft:th_test", JSON.stringify({
+  id: "th_test", status: "pending_review", post: "這是一篇只做安全測試的 Threads 文字。", createdAt: 1, updatedAt: 1,
+}));
 
 async function request(path, body, headers = {}) {
   const response = await worker.fetch(
@@ -33,6 +41,15 @@ async function post(path, body, headers) {
   assert.equal(response.status, 200, JSON.stringify(data));
   return data;
 }
+
+const threadsApproved = await post("/threads-growth/approve", { draftId: "th_test" });
+assert.equal(threadsApproved.draft.status, "approved");
+const threadsDryRun = await post("/threads-growth/test-publish", { draftId: "th_test" });
+assert.equal(threadsDryRun.dryRun, true);
+assert.equal(threadsDryRun.test.result, "ready_for_official_publish");
+const threadsBlocked = await request("/threads-growth/publish", { draftId: "th_test" });
+assert.equal(threadsBlocked.response.status, 409);
+assert.equal(threadsBlocked.data.error, "THREADS_LIVE_PUBLISH_DISABLED");
 
 const videoConfig = await post("/video-config", {});
 assert.equal(videoConfig.ready, false);

@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
+const workerUrl = new URL("../sales-team-worker.js", import.meta.url);
+const source = readFileSync(workerUrl, "utf8");
 assert.match(source, /"\/reference-orchestrate"/);
 assert.match(source, /REFERENCE_RUNTIME_V1/);
 assert.match(source, /referenceOrchestrate/);
 
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-const worker = (await import(moduleUrl)).default;
+workerUrl.searchParams.set("test", String(Date.now()));
+const worker = (await import(workerUrl.href)).default;
 const origin = "https://jacky95188888.github.io";
 const nativeFetch = globalThis.fetch;
 let anthropicCalls = 0;
