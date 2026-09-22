@@ -13,6 +13,7 @@ on:
   push:
     branches:
       - main
+      - video-quality-v3-clean
     paths:
       - sales-team-worker.js
       - hq-patch.js

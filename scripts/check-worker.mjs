@@ -41,8 +41,13 @@ const requiredRoutes = [
   "/media-assets",
   "/voice-create",
   "/voice-status",
+  "/video-preflight",
+  "/video-preflight-approve",
   "/video-create",
   "/video-status",
+  "/video-quality",
+  "/internal/video-quality-trusted",
+  "/reference-orchestrate",
   "/publish-config",
   "/oauth-start",
   "/oauth-disconnect",
@@ -95,6 +100,8 @@ assert.match(worker, /config\.autoVideoEnabled === true/);
 assert.match(worker, /request\.voice_id = voice\.id/);
 assert.match(worker, /request\.files = files/);
 assert.match(worker, /嚴禁超過35秒/);
+assert.match(worker, /REFERENCE_RUNTIME_V1/);
+assert.match(worker, /referenceOrchestrate/);
 assert.match(worker, /dryRun: true/);
 assert.match(worker, /THREADS_LIVE_PUBLISH_DISABLED/);
 assert.match(worker, /threads_content_publish/);
@@ -111,7 +118,9 @@ assert.deepEqual(config.triggers?.crons, [
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
 assert.deepEqual(config.secrets?.optional, [
   "HEYGEN_API_KEY",
+  "VIDEO_QC_INTERNAL_TOKEN",
   "PUBLISH_TOKEN_KEY",
+  "YOUTUBE_API_KEY",
   "YOUTUBE_CLIENT_ID",
   "YOUTUBE_CLIENT_SECRET",
   "TIKTOK_CLIENT_KEY",

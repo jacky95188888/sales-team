@@ -1,0 +1,51 @@
+name: Apply Video Quality V3 QC
+on:
+  push:
+    branches: [video-quality-v3-clean]
+    paths:
+      - scripts/patch-video-v3-qc-publish.mjs
+      - .github/workflows/apply-video-v3-qc.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: video-quality-v3-clean
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply secure QC patch to complete Worker
+        run: node scripts/patch-video-v3-qc-publish.mjs
+      - name: Syntax check
+        run: node --check sales-team-worker.js
+      - name: Verify manual score cannot unlock auto publish
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');const s=fs.readFileSync('sales-team-worker.js','utf8');
+          const need=['/video-quality','TRUSTED_VISUAL_QC_V1','function videoV3TrustedGate','async function videoQuality','async function applyVideoV3TrustedQualityReview','manual_client','trusted_server','server_visual_qc','尚未完成可信 Visual QC','autoPublishUnlocked:false','hq:auto-publish-hold:'];
+          for(const x of need) if(!s.includes(x)) throw new Error('missing '+x);
+          const pub=s.indexOf('async function publishVideo');
+          const gate=s.indexOf('自動發布已被可信 V3 QC 擋下',pub);
+          const token=s.indexOf('let token = await getPublisher',pub);
+          if(!(pub>=0&&gate>pub&&token>gate)) throw new Error('trusted publish gate is not before publisher token');
+          const manual=s.indexOf('async function videoQuality');
+          const trusted=s.indexOf('async function applyVideoV3TrustedQualityReview');
+          if(!(manual>=0&&trusted>manual)) throw new Error('QC functions missing');
+          const manualBody=s.slice(manual,trusted);
+          if(manualBody.includes('reviewSource:"trusted_server"')) throw new Error('manual endpoint can forge trusted review');
+          if(!manualBody.includes('autoPublishUnlocked:false')) throw new Error('manual endpoint lock missing');
+          console.log('Trusted QC security verified: manual review != auto-publish authority');
+          NODE
+      - name: Commit integrated secure QC Worker
+        run: |
+          if git diff --quiet -- sales-team-worker.js; then echo 'No Worker change'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add sales-team-worker.js
+          git commit -m 'Secure V3 trusted visual QC auto-publish gate'
+          git push origin HEAD:video-quality-v3-clean
