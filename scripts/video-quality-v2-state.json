@@ -1,0 +1,1 @@
+{"states":["editorial_ready","director_ready","preflight_passed","rendering","rendered","quality_review","regenerate","publish_queue","published","failed"],"publishAllowedFrom":["publish_queue"],"maxRegenerationAttempts":2}

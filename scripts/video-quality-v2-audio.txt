@@ -1,0 +1,1 @@
+Voice must sound conversational, not read word-by-word. Use punctuation/pause/emphasis to shape delivery. Background music stays below speech. If speech is hard to understand or obviously synthetic enough to distract, quality gate fails.
