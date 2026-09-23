@@ -1,0 +1,28 @@
+name: Growth tools offline checks
+on:
+  pull_request:
+    paths:
+      - 'growth-tools*'
+      - 'tests/growth-tools*'
+      - '.github/workflows/check-growth-tools.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/growth-tools.test.mjs
+      - run: node --check growth-tools-ui.mjs
+      - name: Install isolated browser test dependency
+        run: |
+          npm install --prefix /tmp/growth-browser --no-package-lock --ignore-scripts playwright@1.62.1
+          node /tmp/growth-browser/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Verify browser safety and user flow
+        env:
+          NODE_PATH: /tmp/growth-browser/node_modules
+        run: node tests/growth-tools-browser.cjs
