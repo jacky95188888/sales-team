@@ -28,4 +28,23 @@
 
 `node --test tests/growth-tools.test.mjs`
 
-瀏覽器測試規格（非已通過聲明）：390px 與桌面寬度無水平溢出；產生五個網址；HTML 測試包含 script/img/iframe，應零外部請求且無腳本執行；選取新檔後清除舊報告；匯出記錄仍為草稿。對應 `tests/growth-tools-browser.cjs` 與獨立 GitHub Actions。此次本機 Chromium 下載失敗，瀏覽器驗證尚待 CI 執行。Node 邏輯測試 2 項已通過，JS 語法檢查已通過。正式站需合併後另行確認，這次不部署。
+GitHub Actions 已通過，測試對應程式提交 `cc12ea4577f08d967d05de3081e40289da7068b1`：
+https://github.com/jacky95188888/sales-team/actions/runs/35806711225
+
+- Node 邏輯測試 2 項、JavaScript 語法檢查通過。
+- Chromium 390px 手機與 1280px 桌面版無水平溢出。
+- 產生五平台追蹤網址，保留既有網址參數與錨點。
+- 匯入包含 script、img、iframe 的 HTML：無腳本執行、零外部請求。
+- 六項檢核與下載記錄通過，記錄仍是 draft，沒有發布授權。
+- 修改活動或更換 HTML 檔後，舊結果失效。
+
+本機 Chromium 下載失敗，上述瀏覽器驗證由 GitHub Actions 完成；尚未實測 iPhone Safari。這次收尾只更新文件，不變更已驗證的程式。
+
+## 使用與上線狀態
+
+目前為待審查版本，未合併、未部署，正式站不會出現此入口。
+上線後入口為首頁「網站成長工具」，依序填正式網址、活動代號（例如 sanbao_launch_2026）、素材代號（例如 post_a），產生並複製各平台連結。UTM 只負責標記，目的站需另有分析工具才能看來源成效。
+
+HTML 檢查需匯入原始 HTML 檔案，不接受截圖或只輸入網址；勾選人工清單後可下載本次 JSON 審核紀錄。關閉頁面前需自行匯出，未保存內容不會跨裝置同步。
+
+未納入：真實 GA4/GSC 串接、Worker 自動預審、影片品質閘門接線、自動發布。
