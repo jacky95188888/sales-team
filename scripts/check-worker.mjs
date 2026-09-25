@@ -6,7 +6,8 @@ const workerV2 = readFileSync(new URL("../sales-team-worker-v2.js", import.meta.
 const threadsBridge = readFileSync(new URL("../threads-worker-bridge-v1.js", import.meta.url), "utf8");
 const threadsService = readFileSync(new URL("../threads-service-v1.js", import.meta.url), "utf8");
 const threadsAdapter = readFileSync(new URL("../threads-adapter-v1.js", import.meta.url), "utf8");
-const growthConsole = readFileSync(new URL("../growth-console-v1.js", import.meta.url), "utf8");
+const growthConsole = readFileSync(new URL("../growth-research-console.js", import.meta.url), "utf8");
+const homepage = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
 const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
 
@@ -25,6 +26,8 @@ assert.match(growthConsole, /\/growth-profile/);
 assert.match(growthConsole, /\/growth-run/);
 assert.match(growthConsole, /\/growth-review/);
 assert.match(growthConsole, /\/growth-result/);
+assert.match(growthConsole, /runId: run.id, draftId/);
+assert.match(homepage, /growth-research-console\.js\?v=review-only-v1/);
 assert.doesNotMatch(growthConsole, /\/(?:threads-)?publish(?:[-/"'])/i);
 assert.doesNotMatch(growthConsole, /HeyGen|TikTok|YouTube/i);
 assert.match(threadsBridge, /THREADS_APP_ID/);
