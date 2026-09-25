@@ -58,8 +58,12 @@ assert.equal(reviewed.status, "approved");
 assert.equal(reviewed.autoPublish, false);
 const latest = await getGrowthRun(env, "workspace-a");
 assert.equal(latest.topics[0].draft.status, "approved");
-const recorded = await recordGrowthPerformance(env, { workspaceId: "workspace-a", result: { platform: "threads", topic: latest.topics[0].title, hookType: latest.topics[0].draft.hookType, metrics: { impressions: 120 }, review: "人工回填", lesson: "第一句要更具體" } });
+const recorded = await recordGrowthPerformance(env, { workspaceId: "workspace-a", result: { runId: result.id, draftId: "draft-1", platform: "threads", topic: latest.topics[0].title, hookType: latest.topics[0].draft.hookType, metrics: { impressions: 120 }, review: "人工回填", lesson: "第一句要更具體" } });
 assert.equal(recorded.autoPublish, false);
-assert.ok(await env.MONITOR.get("growth:v1:workspace-a:history"));
+assert.equal(recorded.result.runId, result.id);
+assert.equal(recorded.result.draftId, "draft-1");
+const history = JSON.parse(await env.MONITOR.get("growth:v1:workspace-a:history"));
+assert.equal(history[0].runId, result.id);
+assert.equal(history[0].draftId, "draft-1");
 
 console.log("Growth run test passed (research -> review -> result record -> MONITOR, zero publish).");
