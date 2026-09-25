@@ -61,6 +61,8 @@ export async function recordGrowthResult(env, workspaceId, result = {}) {
   const old = JSON.parse((await env.MONITOR.get(key)) || "[]");
   const item = {
     id: cleanText(result.id || crypto.randomUUID(), 100),
+    runId: cleanText(result.runId, 100),
+    draftId: cleanText(result.draftId, 100),
     platform: cleanText(result.platform, 60),
     topic: cleanText(result.topic, 300),
     hookType: cleanText(result.hookType, 100),
