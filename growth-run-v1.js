@@ -204,6 +204,8 @@ export async function recordGrowthPerformance(env, body) {
   const result = body?.result && typeof body.result === "object" ? body.result : body;
   const item = await recordGrowthResult(env, id, {
     id: result.id,
+    runId: result.runId,
+    draftId: result.draftId,
     platform: result.platform || "threads",
     topic: result.topic,
     hookType: result.hookType,
