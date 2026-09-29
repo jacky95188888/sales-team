@@ -204,3 +204,8 @@ assert.match(approvalConsole, /全自動模式/);
 assert.match(approvalConsole, /經我同意模式/);
 assert.match(approvalConsole, /setMode\("auto"\)/);
 assert.match(approvalConsole, /setMode\("review"\)/);
+
+assert.match(worker, /threads:growth:auto-execution:latest/);
+assert.match(worker, /approved_waiting_live_enable/);
+assert.match(worker, /publish_failed/);
+assert.match(approvalConsole, /最近自動執行/);
