@@ -63,6 +63,12 @@ assert.equal(configUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
 const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
 const configSaved = await post("/threads-growth/config", { action: "save", config: { livePublishEnabled: false } }, approvalHeaders);
 assert.equal(configSaved.config.livePublishEnabled, false);
+const researchFailed = await request("/threads-growth/research-now", {}, approvalHeaders);
+assert.equal(researchFailed.response.status, 502);
+assert.match(researchFailed.data.error, /研究失敗/);
+const researchFailureStatus = await post("/threads-growth/status", {}, approvalHeaders);
+assert.equal(researchFailureStatus.latestResearchError.error, "尚未設定 ANTHROPIC_KEY");
+
 const threadsUnauthorized = await request("/threads-growth/approve", { draftId: "th_test" });
 assert.equal(threadsUnauthorized.response.status, 401);
 assert.equal(threadsUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
