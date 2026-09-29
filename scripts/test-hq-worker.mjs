@@ -18,7 +18,7 @@ class MemoryKV {
   }
 }
 
-const env = { MONITOR: new MemoryKV(), APPROVAL_KEY: "test-approval-pin" };
+const env = { MONITOR: new MemoryKV(), APPROVAL_KEY_SHA256: "7f90e0a4e15687175dac49969d36d96420cb659376a5ddca5be22853e7a7324b" };
 const origin = "https://jacky95188888.github.io";
 const workspaceId = "sanbao_0123456789abcdef0123456789abcdef0123";
 
@@ -48,7 +48,7 @@ async function post(path, body, headers) {
 const threadsUnauthorized = await request("/threads-growth/approve", { draftId: "th_test" });
 assert.equal(threadsUnauthorized.response.status, 401);
 assert.equal(threadsUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
-const approvalHeaders = { "X-Approval-Key": env.APPROVAL_KEY };
+const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
 const threadsList = await post("/threads-growth/drafts", {}, approvalHeaders);
 assert.equal(threadsList.drafts[0].id, "th_test");
 const threadsApproved = await post("/threads-growth/approve", { draftId: "th_test" }, approvalHeaders);
