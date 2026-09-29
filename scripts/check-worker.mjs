@@ -168,7 +168,7 @@ assert.match(deployWorker, /for attempt in 1 2 3 4 5 6/);
 assert.match(deployWorker, /status" != "401"/);
 assert.match(deployWorker, /test "\$verified" = "1"/);
 
-// Autonomous Threads research must remain review-only and scheduled once per Taiwan morning.
+// Autonomous Threads research runs once per Taiwan morning; publish behavior follows the owner-selected mode.
 assert.match(worker, /threadsAutonomousResearch/);
 assert.match(worker, /autonomous_daily_research/);
 assert.match(worker, /threads:growth:research:latest/);
@@ -194,3 +194,13 @@ assert.match(worker, /NO_RESEARCH_CANDIDATES/);
 assert.match(worker, /latestResearchError/);
 assert.match(approvalConsole, /最近研究失敗/);
 assert.match(approvalConsole, /already_completed/);
+
+// Two explicit owner-selected Threads operation modes.
+assert.match(worker, /autoFinalizeThreadsDraft/);
+assert.match(worker, /config\.mode === "auto"/);
+assert.match(worker, /publishThreadsDraftInternal/);
+assert.match(worker, /normalizeThreadsConfig\(\{ \.\.\.current, \.\.\.patch \}\)/);
+assert.match(approvalConsole, /全自動模式/);
+assert.match(approvalConsole, /經我同意模式/);
+assert.match(approvalConsole, /setMode\("auto"\)/);
+assert.match(approvalConsole, /setMode\("review"\)/);

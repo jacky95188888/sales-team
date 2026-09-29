@@ -69,12 +69,26 @@
         '<div class="out"><b>執行狀態</b><br>' +
         (d.approvalConfigured ? '✅ PIN 安全閘門已設定' : '❌ PIN 安全閘門未設定') + '<br>' +
         (d.oauthConnected ? '✅ Threads 官方授權已連線' : '⚠️ Threads 尚未完成官方授權') + '<br>' +
+        (d.mode === 'auto' ? '🤖 模式：全自動（研究→寫稿→安全檢查→正式發布）' : '🛡️ 模式：經我同意（研究→寫稿→等待批准）') + '<br>' +
         (d.livePublishEnabled ? '🟢 正式發布已開啟' : '🟡 正式發布預設關閉') + '<br>' +
         (d.autonomousResearchEnabled ? '🤖 每日上午自動找題研究，不必先下主題' : '⚠️ 自動研究未開啟') + '<br>' +
         (d.latestResearch ? '📝 最近研究：' + esc(d.latestResearch.date) + '，候選 ' + Number(d.latestResearch.candidateCount||0) + ' 題／待審草稿 ' + Number(d.latestResearch.draftCount||0) + ' 份<br>' : '') +
         (d.latestResearchError ? '⚠️ 最近研究失敗（' + esc(d.latestResearchError.date||"") + '）：' + esc(d.latestResearchError.error||"") + '<br>' : '') +
         '✅ 安全測試可用</div>';
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+  }
+  async function setMode(mode) {
+    var auto = mode === "auto";
+    var msg = auto
+      ? "切換成【全自動模式】後，顧問團研究出值得寫的內容，會自動安全檢查並在官方 Threads 授權有效時直接公開發布，不會逐篇等你批准。確定開啟？"
+      : "切換成【經我同意模式】後，AI 仍會自動研究與寫草稿，但每篇都要等你批准後才能正式發布。確定切換？";
+    if (!confirm(msg)) return;
+    try {
+      status("正在切換模式…");
+      await post("/threads-growth/config", {action:"save", config:{mode:mode, livePublishEnabled:auto}}, true);
+      await refresh();
+      status(auto ? "已切換：全自動模式。" : "已切換：經我同意模式。");
+    } catch(e) { status(e.message, true); }
   }
   async function researchNow() {
     if (!confirm("現在立即讓顧問團研究今天值得討論的題目？只會研究與產生待審草稿，不會發布。")) return;
@@ -129,7 +143,7 @@
     var context = (el("threadsGateContext").value || "").trim();
     if (!topic) return status("請先填一個題目。", true);
     try {
-      status("AI 正在產生 Threads 草稿；這一步不會發布。");
+      status("AI 正在處理這個題目；是否直接發布會依目前運作模式決定。");
       await post("/threads-growth/draft", {topic:topic, context:context}, false);
       await refresh();
     } catch(e) { status(e.message, true); }
@@ -173,12 +187,15 @@
     page.innerHTML=
       '<div class="panel" style="background:linear-gradient(145deg,rgba(76,45,118,.98),rgba(32,20,58,.98))">'+
       '<div style="font-size:1.2rem;font-weight:900;color:var(--gold-lt)">🛡️ Threads AI 執行閘門</div>'+
-      '<div class="hint">AI 可以研究與寫草稿，但不能自己公開發文。只有你輸入執行 PIN、查看內容並按「正式發布」才會送出。</div></div>'+
+      '<div class="hint">你可以選兩種模式：全自動，或每篇經你同意。模式切換本身一定需要 PIN。</div></div>'+
+      '<section class="panel"><b>運作模式</b><div class="hint">全自動：設定一次後自己研究、討論、寫稿、安全檢查並發布。經我同意：研究與寫稿自動，但發布前等你批准。</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" id="threadsModeAuto" type="button">🤖 全自動模式</button><button class="btn btn2" id="threadsModeReview" type="button">🛡️ 經我同意模式</button></div></section>'+
       '<section class="panel"><b>建立待審核草稿</b><input id="threadsGateTopic" placeholder="例如：一人公司如何用 AI 減少重複工作" style="margin-top:8px"><textarea id="threadsGateContext" placeholder="補充資料（可留白）" style="margin-top:8px;min-height:90px"></textarea><button class="btn" id="threadsGateDraft" type="button">產生草稿（不發布）</button></section>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="threadsGateResearchNow" type="button">🔎 立即研究今天題目</button><button class="btn btn2" id="threadsGateRefresh" type="button">更新審核清單</button><button class="copy" id="threadsGateChangePin" type="button">重新輸入 PIN</button></div>'+
       '<div id="threadsGateReady"></div><div id="threadsGateResearch"></div><div id="threadsGateStatus"></div><div id="threadsGateDrafts"></div>';
     wrap.appendChild(page);
     var nav=el("navbar"); if(nav){ var n=document.createElement("button"); n.setAttribute("data-p","threads_gate"); n.innerHTML='<span class="ic">🛡️</span>脆審核'; nav.appendChild(n); }
+    el("threadsModeAuto").onclick=function(){ setMode("auto"); };
+    el("threadsModeReview").onclick=function(){ setMode("review"); };
     el("threadsGateDraft").onclick=createDraft;
     el("threadsGateResearchNow").onclick=researchNow;
     el("threadsGateRefresh").onclick=refresh;
