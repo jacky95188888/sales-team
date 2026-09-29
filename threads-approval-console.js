@@ -61,7 +61,20 @@
     box.querySelectorAll(".tgDry").forEach(function(b){ b.onclick=function(){ dry(cache[+b.dataset.i]); }; });
     box.querySelectorAll(".tgPublish").forEach(function(b){ b.onclick=function(){ publish(cache[+b.dataset.i]); }; });
   }
+  async function readiness() {
+    try {
+      var d = await post("/threads-growth/status", {}, false);
+      var box = el("threadsGateReady");
+      if (box) box.innerHTML =
+        '<div class="out"><b>執行狀態</b><br>' +
+        (d.approvalConfigured ? '✅ PIN 安全閘門已設定' : '❌ PIN 安全閘門未設定') + '<br>' +
+        (d.oauthConnected ? '✅ Threads 官方授權已連線' : '⚠️ Threads 尚未完成官方授權') + '<br>' +
+        (d.livePublishEnabled ? '🟢 正式發布已開啟' : '🟡 正式發布預設關閉') + '<br>' +
+        '✅ 安全測試可用</div>';
+    } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+  }
   async function refresh() {
+    readiness();
     try {
       status("正在讀取待審核草稿…");
       var d = await post("/threads-growth/drafts", {}, true);
@@ -120,7 +133,7 @@
       '<div class="hint">AI 可以研究與寫草稿，但不能自己公開發文。只有你輸入執行 PIN、查看內容並按「正式發布」才會送出。</div></div>'+
       '<section class="panel"><b>建立待審核草稿</b><input id="threadsGateTopic" placeholder="例如：一人公司如何用 AI 減少重複工作" style="margin-top:8px"><textarea id="threadsGateContext" placeholder="補充資料（可留白）" style="margin-top:8px;min-height:90px"></textarea><button class="btn" id="threadsGateDraft" type="button">產生草稿（不發布）</button></section>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn2" id="threadsGateRefresh" type="button">更新審核清單</button><button class="copy" id="threadsGateChangePin" type="button">重新輸入 PIN</button></div>'+
-      '<div id="threadsGateStatus"></div><div id="threadsGateDrafts"></div>';
+      '<div id="threadsGateReady"></div><div id="threadsGateStatus"></div><div id="threadsGateDrafts"></div>';
     wrap.appendChild(page);
     var nav=el("navbar"); if(nav){ var n=document.createElement("button"); n.setAttribute("data-p","threads_gate"); n.innerHTML='<span class="ic">🛡️</span>脆審核'; nav.appendChild(n); }
     el("threadsGateDraft").onclick=createDraft;
