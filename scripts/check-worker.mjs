@@ -25,6 +25,7 @@ const requiredRoutes = [
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
+  "/threads-growth/drafts",
   "/threads-growth/approve",
   "/threads-growth/test-publish",
   "/threads-growth/publish",
@@ -105,6 +106,16 @@ assert.match(worker, /referenceOrchestrate/);
 assert.match(worker, /dryRun: true/);
 assert.match(worker, /THREADS_LIVE_PUBLISH_DISABLED/);
 assert.match(worker, /threads_content_publish/);
+assert.match(worker, /X-Approval-Key/);
+assert.match(worker, /APPROVAL_KEY_NOT_CONFIGURED/);
+assert.match(worker, /APPROVAL_UNAUTHORIZED/);
+assert.match(worker, /threads:growth:draft:/);
+const approvalConsole = readFileSync(new URL("../threads-approval-console.js", import.meta.url), "utf8");
+assert.match(approvalConsole, /查看 AI 建議／完整草稿/);
+assert.match(approvalConsole, /批准/);
+assert.match(approvalConsole, /拒絕/);
+assert.match(approvalConsole, /正式發布/);
+assert.match(approvalConsole, /sessionStorage/);
 assert.match(worker, /env\.PUBLISH_TOKEN_KEY \|\| env\.YOUTUBE_CLIENT_SECRET \|\| env\.ANTHROPIC_KEY/);
 
 assert.equal(config.name, "sales-team");
