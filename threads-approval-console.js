@@ -72,6 +72,7 @@
         (d.livePublishEnabled ? '🟢 正式發布已開啟' : '🟡 正式發布預設關閉') + '<br>' +
         (d.autonomousResearchEnabled ? '🤖 每日上午自動找題研究，不必先下主題' : '⚠️ 自動研究未開啟') + '<br>' +
         (d.latestResearch ? '📝 最近研究：' + esc(d.latestResearch.date) + '，候選 ' + Number(d.latestResearch.candidateCount||0) + ' 題／待審草稿 ' + Number(d.latestResearch.draftCount||0) + ' 份<br>' : '') +
+        (d.latestResearchError ? '⚠️ 最近研究失敗（' + esc(d.latestResearchError.date||"") + '）：' + esc(d.latestResearchError.error||"") + '<br>' : '') +
         '✅ 安全測試可用</div>';
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }
@@ -79,9 +80,11 @@
     if (!confirm("現在立即讓顧問團研究今天值得討論的題目？只會研究與產生待審草稿，不會發布。")) return;
     try {
       status("顧問團正在上網研究今天的題目，完成後會放進待審核。");
-      await post("/threads-growth/research-now", {}, true);
+      var result = await post("/threads-growth/research-now", {}, true);
       await refresh();
-      status("今日自動研究完成，請查看研究報告與待審草稿。");
+      status(result.runStatus === "already_completed"
+        ? "今天已研究過，直接顯示現有報告與待審草稿。"
+        : "今日自動研究完成，請查看研究報告與待審草稿。");
     } catch(e) { status(e.message, true); }
   }
   async function researchReport() {
@@ -94,7 +97,7 @@
         box.innerHTML = '<div class="hint">今日自動研究尚未產生；排程會在上午自動執行。</div>';
         return;
       }
-      box.innerHTML = '<section class="panel" style="margin:10px 0"><b style="color:var(--gold-lt)">🔎 今日自動研究報告｜' + esc(report.date||"") + '</b>' +
+      box.innerHTML = '<section class="panel" style="margin:10px 0"><b style="color:var(--gold-lt)">🔎 最近自動研究報告｜' + esc(report.date||"") + '</b>' +
         '<div class="hint">顧問團自己找出的討論候選。你不用先下主題。</div>' +
         report.candidates.map(function(x,i){
           return '<div class="out" style="margin-top:8px"><b>'+(i+1)+'. '+esc(x.topic||"")+'</b>' +
