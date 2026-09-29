@@ -162,7 +162,7 @@ for (const pattern of forbiddenPatterns) {
 
 console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
 
-assert.match(deployWorker, /for route in status config discover research research-now draft drafts approve test-publish publish/);
+assert.match(deployWorker, /for route in status config discover research research-now draft drafts approve test-publish publish metrics learn/);
 assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
 assert.match(deployWorker, /for attempt in 1 2 3 4 5 6/);
 assert.match(deployWorker, /status" != "401"/);
@@ -244,3 +244,8 @@ assert.match(approvalConsole, /post\("\/threads-growth\/draft", \{topic:topic, c
 assert.doesNotMatch(approvalConsole, /post\("\/threads-growth\/draft", \{topic:topic, context:context\}, false\)/);
 
 assert.match(approvalConsole, /post\("\/threads-growth\/test-publish", \{draftId:item\.id\}, true\)/);
+
+// Metrics may update counters only for known published history; they must not replace the learning corpus.
+assert.match(worker, /const metricFields = \["views", "likes", "replies", "reposts", "measuredAt"\]/);
+assert.match(worker, /if \(index < 0\) continue/);
+assert.doesNotMatch(worker, /put\("threads:growth:history", JSON\.stringify\(rows\)\)/);
