@@ -126,6 +126,10 @@ async function autoFinalizeThreadsDraft(env, id, config) {
   const log = async (status, extra = {}) => {
     const item = { draftId: record.id, topic: record.topic || "", status, at: Date.now(), ...extra };
     await env.MONITOR.put("threads:growth:auto-execution:latest", JSON.stringify(item), { expirationTtl: 2592000 });
+    const historyKey = "threads:growth:auto-execution:history";
+    const history = JSON.parse((await env.MONITOR.get(historyKey)) || "[]");
+    history.unshift(item);
+    await env.MONITOR.put(historyKey, JSON.stringify(history.slice(0, 30)), { expirationTtl: 7776000 });
     return item;
   };
   record.status = "approved";
@@ -165,10 +169,12 @@ async function threadsGrowth(env, path, b) {
     const latestResearch = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
     const latestResearchError = JSON.parse((await env.MONITOR.get("threads:growth:auto-research-error")) || "null");
     const latestAutoExecution = JSON.parse((await env.MONITOR.get("threads:growth:auto-execution:latest")) || "null");
+    const autoExecutionHistory = JSON.parse((await env.MONITOR.get("threads:growth:auto-execution:history")) || "[]");
     return {
       stage: "status",
       latestResearchError,
       latestAutoExecution,
+      autoExecutionHistory: autoExecutionHistory.slice(0, 10),
       autonomousResearchEnabled: true,
       latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
