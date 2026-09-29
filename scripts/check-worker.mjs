@@ -237,3 +237,8 @@ assert.match(approvalConsole, /threads-growth\/oauth-start/);
 assert.match(approvalConsole, /enableLivePublish/);
 assert.match(approvalConsole, /全自動模式下，通過研究與安全檢查的內容之後可直接公開發布/);
 assert.match(approvalConsole, /post\("\/threads-growth\/config", \{action:"save", config:\{livePublishEnabled:true\}\}, true\)/);
+
+// Auto mode makes /draft side-effect capable; both owner status and draft creation must require the approval gate.
+assert.match(worker, /"\/threads-growth\/status"[\s\S]*"\/threads-growth\/draft"/);
+assert.match(hqTest, /statusUnauthorized/);
+assert.match(hqTest, /draftUnauthorized/);
