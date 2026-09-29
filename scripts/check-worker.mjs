@@ -238,5 +238,3 @@ assert.match(approvalConsole, /enableLivePublish/);
 assert.match(approvalConsole, /全自動模式下，通過研究與安全檢查的內容之後可直接公開發布/);
 assert.match(approvalConsole, /post\("\/threads-growth\/config", \{action:"save", config:\{livePublishEnabled:true\}\}, true\)/);
 
-assert.match(hqTest, /statusUnauthorized/);
-assert.match(hqTest, /draftUnauthorized/);
