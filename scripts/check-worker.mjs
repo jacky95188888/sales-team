@@ -110,6 +110,7 @@ assert.match(worker, /threads_content_publish/);
 assert.match(worker, /X-Approval-Key/);
 assert.match(worker, /APPROVAL_KEY_NOT_CONFIGURED/);
 assert.match(worker, /APPROVAL_UNAUTHORIZED/);
+assert.match(worker, /\["\\\/threads-growth\\\/config", "\\/threads-growth\\\/drafts"/);
 assert.equal(config.vars.APPROVAL_KEY_SHA256.length, 64);
 assert.match(config.vars.APPROVAL_KEY_SHA256, /^[a-f0-9]{64}$/);
 assert.doesNotMatch(deployWorker, /secrets\.APPROVAL_KEY/);
