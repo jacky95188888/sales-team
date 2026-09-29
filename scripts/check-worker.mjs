@@ -172,4 +172,4 @@ assert.match(worker, /event\?\.cron !== "0 1 \* \* \*"/);
 assert.match(approvalConsole, /不必先下主題/);
 
 assert.match(approvalConsole, /今日自動研究報告/);
-assert.match(approvalConsole, /threads-growth\\/research/);
+assert.ok(approvalConsole.includes("/threads-growth/research"));
