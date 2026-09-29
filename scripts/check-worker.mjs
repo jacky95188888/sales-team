@@ -255,3 +255,12 @@ assert.match(worker, /const learned = learnFromThreadsMetrics\(keptHistory\)/);
 assert.match(worker, /learningSummary: learned \? \{/);
 assert.match(approvalConsole, /顧問團學到什麼/);
 assert.match(approvalConsole, /目前樣本還不足，先繼續探索/);
+
+// Official Threads performance should sync automatically at 21:00 Taiwan and feed the learning loop.
+assert.match(worker, /async function threadsSyncOfficialInsights/);
+assert.match(worker, /event\?\.cron !== "0 13 \* \* \*"/);
+assert.match(worker, /graph\.threads\.net\/v1\.0\//);
+assert.match(worker, /"views,likes,replies,reposts"/);
+assert.match(worker, /threads:growth:insights-sync:latest/);
+assert.match(worker, /threadsSyncOfficialInsights\(env, e\)/);
+assert.match(approvalConsole, /最近成效同步/);
