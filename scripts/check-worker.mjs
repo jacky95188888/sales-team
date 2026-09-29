@@ -228,3 +228,12 @@ assert.match(approvalConsole, /目前是【經我同意模式】/);
 assert.match(approvalConsole, /var key = approvalKey\(false\)/);
 assert.match(approvalConsole, /Promise\.all\(\[/);
 assert.match(approvalConsole, /readiness\(\),[\s\S]*researchReport\(\),[\s\S]*post\("\/threads-growth\/drafts", \{\}, true\)/);
+
+// Mobile owner console should turn status into one concrete next action without bypassing approval protection.
+assert.match(approvalConsole, /老闆下一步/);
+assert.match(approvalConsole, /nextOwnerAction/);
+assert.match(approvalConsole, /完成 Threads 授權/);
+assert.match(approvalConsole, /threads-growth\/oauth-start/);
+assert.match(approvalConsole, /enableLivePublish/);
+assert.match(approvalConsole, /全自動模式下，通過研究與安全檢查的內容之後可直接公開發布/);
+assert.match(approvalConsole, /post\("\/threads-growth\/config", \{action:"save", config:\{livePublishEnabled:true\}\}, true\)/);
