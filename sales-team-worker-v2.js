@@ -8,6 +8,7 @@ import {
 } from "./threads-worker-bridge-v1.js";
 import { buildThreadsDraftCycle, buildThreadsReviewCycle } from "./threads-cycle-v1.js";
 import { getGrowthProfile, getGrowthRun, putGrowthProfile, recordGrowthPerformance, reviewGrowthDraft, runGrowthResearch } from "./growth-run-v1.js";
+import { createApprovalRequest, getApprovalRequest, listApprovalRequests, reviewApprovalRequest, executeApprovedRequest } from "./agent-approval-v1.js";
 
 const ORIGIN = "https://jacky95188888.github.io";
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers } });
@@ -69,11 +70,20 @@ async function getCycle(env, body) { const workspaceId = String(body.workspaceId
 export default {
   scheduled(event, env, ctx) { const legacy = Promise.resolve(baseWorker.scheduled(event, env, ctx)); const threads = threadsCultivationScheduled(event, env); ctx?.waitUntil?.(threads); return legacy; },
   async fetch(req, env, ctx) {
-    const url = new URL(req.url), H = cors(req), isExtended = url.pathname.startsWith("/threads-") || url.pathname.startsWith("/growth-") || url.pathname === "/oauth/threads/callback"; if (!isExtended) return baseWorker.fetch(req, env, ctx); if (req.method === "OPTIONS") return new Response(null, { headers: H });
+    const url = new URL(req.url), H = cors(req), isExtended = url.pathname.startsWith("/threads-") || url.pathname.startsWith("/growth-") || url.pathname.startsWith("/agent-") || url.pathname === "/oauth/threads/callback"; if (!isExtended) return baseWorker.fetch(req, env, ctx); if (req.method === "OPTIONS") return new Response(null, { headers: H });
     try {
       if (req.headers.get("Origin") && req.headers.get("Origin") !== ORIGIN) return json({ error: "ORIGIN_DENIED" }, 403, H);
       if (url.pathname === "/oauth/threads/callback" && req.method === "GET") { await threadsOauthCallback(req, env); const target = `${ORIGIN}/sales-team/?oauth=threads&result=connected`; return new Response(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="refresh" content="2;url=${target}"><body style="margin:0;background:#140b2d;color:#fff;font-family:system-ui;display:grid;place-items:center;min-height:100vh"><main style="padding:32px;border:1px solid #cda84a;border-radius:24px;background:#241742;text-align:center"><h1>✅ Threads 連線完成</h1><p>帳號已安全連接，尚未自動發布內容。</p><a style="color:#ffe291" href="${target}">返回顧問團</a></main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } }); }
       if (req.method !== "POST") return json({ error: "POST_ONLY" }, 405, H); const body = await req.json();
+      if (url.pathname === "/agent-proposal") return json(await createApprovalRequest(env, body), 200, H);
+      if (url.pathname === "/agent-proposal-get") return json(await getApprovalRequest(env, body.workspaceId, body.proposalId), 200, H);
+      if (url.pathname === "/agent-proposal-list") return json(await listApprovalRequests(env, body.workspaceId), 200, H);
+      if (url.pathname === "/agent-review") return json(await reviewApprovalRequest(env, body), 200, H);
+      if (url.pathname === "/agent-execute") return json(await executeApprovedRequest(env, body, async item => {
+        if (item.action === "threads.publish-post") return threadsRoute(env, { ...item.payload, workspaceId: item.workspaceId, action: "publish-post" }, prompt => ai(env, prompt));
+        if (item.action === "threads.publish-reply") return threadsRoute(env, { ...item.payload, workspaceId: item.workspaceId, action: "publish-reply" }, prompt => ai(env, prompt));
+        throw Object.assign(new Error("APPROVAL_ACTION_NOT_ALLOWED"), { status: 400 });
+      }), 200, H);
       if (url.pathname === "/growth-profile") return json(body.profile ? await putGrowthProfile(env, body.workspaceId, body.profile) : await getGrowthProfile(env, body.workspaceId), 200, H);
       if (url.pathname === "/growth-run") return json(await runGrowthResearch(env, body, (prompt, options) => ai(env, prompt, options)), 200, H);
       if (url.pathname === "/growth-run-get") return json(await getGrowthRun(env, body.workspaceId, body.runId), 200, H);
@@ -85,7 +95,7 @@ export default {
       if (url.pathname === "/threads-oauth-start") return json(await threadsOauthStart(req, env, body.workspaceId), 200, H);
       if (url.pathname === "/threads-disconnect") return json(await threadsDisconnect(env, body.workspaceId), 200, H);
       if (url.pathname === "/threads-publish-preview") return json(await threadsRoute(env, { ...body, action: "publish-preview" }, prompt => ai(env, prompt)), 200, H);
-      if (url.pathname === "/threads-action") return json(await threadsRoute(env, body, prompt => ai(env, prompt)), 200, H);
+      if (url.pathname === "/threads-action") { if (["publish-post", "publish-reply"].includes(String(body.action || ""))) throw Object.assign(new Error("APPROVAL_REQUIRED"), { status: 409 }); return json(await threadsRoute(env, body, prompt => ai(env, prompt)), 200, H); }
       return json({ error: "NOT_FOUND" }, 404, H);
     } catch (error) { return json({ error: String(error?.message || error).slice(0, 700) }, Number(error?.status || 500), H); }
   },
