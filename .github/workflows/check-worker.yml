@@ -5,6 +5,8 @@ on:
     paths:
       - sales-team-worker.js
       - hq-patch.js
+      - threads-approval-console.js
+      - index.html
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
@@ -17,6 +19,8 @@ on:
     paths:
       - sales-team-worker.js
       - hq-patch.js
+      - threads-approval-console.js
+      - index.html
       - wrangler.jsonc
       - WORKER-RECOVERY.md
       - scripts/check-worker.mjs
@@ -38,6 +42,7 @@ jobs:
         run: |
           node --check sales-team-worker.js
           node --check hq-patch.js
+          node --check threads-approval-console.js
       - name: Check routes, bindings, schedule, and secrets
         run: |
           node scripts/check-worker.mjs
