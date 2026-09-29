@@ -118,6 +118,30 @@ async function publishThreadsDraftInternal(env, id, config) {
   return record;
 }
 
+async function autoFinalizeThreadsDraft(env, id, config) {
+  const key = "threads:growth:draft:" + String(id || "").slice(0, 100);
+  const record = JSON.parse((await env.MONITOR.get(key)) || "null");
+  if (!record) throw new Error("DRAFT_NOT_FOUND");
+  if (config.mode !== "auto") return { status: "waiting_review", draft: record };
+  record.status = "approved";
+  record.autoApprovedAt = Date.now();
+  record.updatedAt = record.autoApprovedAt;
+  const text = String(record.post || "").trim();
+  if (!text || text.length > 5000) throw new Error("THREADS_TEXT_INVALID");
+  const test = { draftId: record.id, textLength: text.length, mediaType: "TEXT", testedAt: Date.now(), result: "ready_for_official_publish", automatic: true };
+  record.lastTestedAt = test.testedAt;
+  await env.MONITOR.put("threads:growth:test:" + record.id, JSON.stringify(test), { expirationTtl: 2592000 });
+  await env.MONITOR.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
+  if (!config.livePublishEnabled) return { status: "approved_waiting_live_enable", draft: record };
+  try {
+    const published = await publishThreadsDraftInternal(env, record.id, config);
+    return { status: "published", draft: published };
+  } catch (error) {
+    await env.MONITOR.put("threads:growth:auto-publish-error:" + record.id, JSON.stringify({ at: Date.now(), error: String(error?.message || error).slice(0, 500) }), { expirationTtl: 604800 });
+    return { status: "publish_failed", error: String(error?.message || error), draft: JSON.parse((await env.MONITOR.get(key)) || "null") };
+  }
+}
+
 async function threadsGrowth(env, path, b) {
   if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
   const cfgKey = "threads:growth:config";
@@ -133,6 +157,7 @@ async function threadsGrowth(env, path, b) {
       latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
       oauthConnected: !!(auth?.accessToken && auth?.userId) || !!(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID),
+      mode: config.mode,
       livePublishEnabled: !!config.livePublishEnabled,
       safeDryRunAvailable: true
     };
@@ -166,6 +191,10 @@ async function threadsGrowth(env, path, b) {
     const id = "th_" + Date.now() + "_" + crypto.randomUUID().slice(0, 8);
     const record = { id, status: "pending_review", topic: String(b.topic || "").slice(0, 300), ...draft, createdAt: Date.now(), updatedAt: Date.now() };
     await env.MONITOR.put("threads:growth:draft:" + id, JSON.stringify(record), { expirationTtl: 2592000 });
+    if (config.mode === "auto") {
+      const autoResult = await autoFinalizeThreadsDraft(env, id, config);
+      return { stage: "draft", draft: autoResult.draft || record, autoResult };
+    }
     return { stage: "draft", draft: record };
   }
   if (path === "/threads-growth/drafts") {
@@ -2210,6 +2239,14 @@ async function threadsAutonomousResearch(env, event) {
       drafts.push(id);
     }
     report.draftIds = drafts;
+    report.mode = config.mode;
+    report.autoResults = [];
+    if (config.mode === "auto") {
+      const publishCount = Math.min(config.postsPerDay, drafts.length);
+      for (const id of drafts.slice(0, publishCount)) {
+        report.autoResults.push({ draftId: id, ...(await autoFinalizeThreadsDraft(env, id, config)) });
+      }
+    }
     report.updatedAt = Date.now();
     await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
     await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
