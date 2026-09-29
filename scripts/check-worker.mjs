@@ -114,7 +114,7 @@ assert.match(worker, /threads_content_publish/);
 assert.match(worker, /X-Approval-Key/);
 assert.match(worker, /APPROVAL_KEY_NOT_CONFIGURED/);
 assert.match(worker, /APPROVAL_UNAUTHORIZED/);
-assert.ok(worker.includes('["/threads-growth/config", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/drafts"'));
+assert.ok(worker.includes('["/threads-growth/status", "/threads-growth/config", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts"'));
 assert.equal(config.vars.APPROVAL_KEY_SHA256.length, 64);
 assert.match(config.vars.APPROVAL_KEY_SHA256, /^[a-f0-9]{64}$/);
 assert.doesNotMatch(deployWorker, /secrets\.APPROVAL_KEY/);
@@ -162,7 +162,7 @@ for (const pattern of forbiddenPatterns) {
 
 console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
 
-assert.match(deployWorker, /for route in config research research-now drafts approve publish/);
+assert.match(deployWorker, /for route in status config research research-now draft drafts approve publish/);
 assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
 assert.match(deployWorker, /for attempt in 1 2 3 4 5 6/);
 assert.match(deployWorker, /status" != "401"/);
@@ -237,3 +237,4 @@ assert.match(approvalConsole, /threads-growth\/oauth-start/);
 assert.match(approvalConsole, /enableLivePublish/);
 assert.match(approvalConsole, /全自動模式下，通過研究與安全檢查的內容之後可直接公開發布/);
 assert.match(approvalConsole, /post\("\/threads-growth\/config", \{action:"save", config:\{livePublishEnabled:true\}\}, true\)/);
+
