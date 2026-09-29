@@ -1,0 +1,16 @@
+/* Agent approval console V1 — human-in-the-loop execution controls. */
+(() => {
+  const $=s=>document.querySelector(s), esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const API=()=>window.WORKER_URL||"", workspace=()=>localStorage.getItem("growthWorkspaceId")||localStorage.getItem("hqWorkspaceId")||"default";
+  async function post(path,body={}){ const base=API(); if(!base) throw new Error("尚未設定 Worker 網址"); const r=await fetch(base.replace(/\/$/,"")+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({workspaceId:workspace(),...body})}); const d=await r.json(); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; }
+  function detail(item){ alert(`AI 建議：\n${item.summary||"未提供"}\n\n動作：${item.action}\n狀態：${item.status}`); }
+  function diff(item){ alert(`修改／執行差異：\n${item.diff||"此提案沒有提供差異說明"}`); }
+  async function reject(item){ if(!confirm("確定退回這項提案？")) return; await post("/agent-review",{proposalId:item.id,decision:"rejected"}); await refresh(); }
+  async function approve(item){ if(!confirm("確認批准並執行？這一步可能會對外發布內容。")) return; await post("/agent-review",{proposalId:item.id,decision:"approved"}); await post("/agent-execute",{proposalId:item.id}); await refresh(); }
+  function render(data){ const box=$("#agentApprovalList"); const items=data?.items||[]; if(!items.length){box.innerHTML='<div class="small">目前沒有待處理 AI 提案。</div>';return;} box.innerHTML=items.map((x,i)=>`<div class="out" style="margin-top:9px"><b>${esc(x.summary||x.action)}</b><div class="small">狀態：${esc(x.status)}｜${esc(x.action)}</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px"><button class="btn btn2 apView" data-i="${i}">查看 AI 建議</button><button class="btn btn2 apDiff" data-i="${i}">查看修改差異</button>${x.status==="review_pending"?`<button class="btn apApprove" data-i="${i}">批准執行</button><button class="btn btn2 apReject" data-i="${i}">拒絕</button>`:""}</div></div>`).join("");
+    box.querySelectorAll(".apView").forEach(b=>b.onclick=()=>detail(items[+b.dataset.i])); box.querySelectorAll(".apDiff").forEach(b=>b.onclick=()=>diff(items[+b.dataset.i])); box.querySelectorAll(".apApprove").forEach(b=>b.onclick=()=>approve(items[+b.dataset.i])); box.querySelectorAll(".apReject").forEach(b=>b.onclick=()=>reject(items[+b.dataset.i]));
+  }
+  async function refresh(){ try{render(await post("/agent-proposal-list")); $("#agentApprovalStatus").textContent="";}catch(e){$("#agentApprovalStatus").textContent=e.message;} }
+  function mount(){ if($("#agentApprovalConsole"))return; const host=document.querySelector(".wrap")||document.body, s=document.createElement("section"); s.id="agentApprovalConsole";s.className="panel";s.innerHTML='<div style="font-size:1.05rem;font-weight:900;color:var(--gold-lt,#f5dea0)">🛡️ AI 執行閘門</div><div class="small">AI 可以研究與提出方案；真正對外發布前必須由你批准。</div><div style="margin-top:10px"><button class="btn btn2" id="agentApprovalRefresh">重新整理提案</button></div><div class="status" id="agentApprovalStatus"></div><div id="agentApprovalList" style="margin-top:10px"></div>';host.appendChild(s);$("#agentApprovalRefresh").onclick=refresh;refresh(); }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",mount);else mount();
+})();
