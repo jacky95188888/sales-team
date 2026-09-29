@@ -45,6 +45,11 @@ async function post(path, body, headers) {
   return data;
 }
 
+const threadsStatus = await post("/threads-growth/status", {});
+assert.equal(threadsStatus.approvalConfigured, true);
+assert.equal(threadsStatus.oauthConnected, false);
+assert.equal(threadsStatus.livePublishEnabled, false);
+assert.equal(threadsStatus.safeDryRunAvailable, true);
 const configUnauthorized = await request("/threads-growth/config", { action: "save", config: { livePublishEnabled: true } });
 assert.equal(configUnauthorized.response.status, 401);
 assert.equal(configUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");

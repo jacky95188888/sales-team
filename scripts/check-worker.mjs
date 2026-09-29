@@ -23,6 +23,7 @@ const requiredRoutes = [
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/threads-growth/status",
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
