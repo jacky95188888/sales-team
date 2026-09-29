@@ -72,6 +72,13 @@
           '📝 待你審核 '+Number(d.todaySummary.pendingReviewCount||0)+' 份｜🚀 今日已發布 '+Number(d.todaySummary.publishedCount||0)+' 篇' +
           (Number(d.todaySummary.autoPublishedCount||0) ? '（全自動 '+Number(d.todaySummary.autoPublishedCount||0)+'）' : '') +
           '</div>' : '') +
+        (d.learningSummary ? '<div class="out" style="margin-top:8px"><b>🧠 顧問團學到什麼</b><br>' +
+          '已納入 '+Number(d.learningSummary.sampleSize||0)+' 篇有效樣本' +
+          (Array.isArray(d.learningSummary.topPatterns) && d.learningSummary.topPatterns.length
+            ? '<br>目前較有效：'+d.learningSummary.topPatterns.map(function(x){ return esc(x.key||"")+'（'+Number(x.count||0)+' 篇）'; }).join('、')
+            : '<br>目前樣本還不足，先繼續探索') +
+          (d.learningSummary.note ? '<br><small>'+esc(d.learningSummary.note)+'</small>' : '') +
+          '</div>' : '') +
         '<div class="out"><b>執行狀態</b><br>' +
         (d.approvalConfigured ? '✅ PIN 安全閘門已設定' : '❌ PIN 安全閘門未設定') + '<br>' +
         (d.oauthConnected ? '✅ Threads 官方授權已連線' : '⚠️ Threads 尚未完成官方授權') + '<br>' +
