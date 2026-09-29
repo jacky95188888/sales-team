@@ -7,6 +7,8 @@ const threadsBridge = readFileSync(new URL("../threads-worker-bridge-v1.js", imp
 const threadsService = readFileSync(new URL("../threads-service-v1.js", import.meta.url), "utf8");
 const threadsAdapter = readFileSync(new URL("../threads-adapter-v1.js", import.meta.url), "utf8");
 const growthConsole = readFileSync(new URL("../growth-research-console.js", import.meta.url), "utf8");
+const approvalGate = readFileSync(new URL("../agent-approval-v1.js", import.meta.url), "utf8");
+const approvalConsole = readFileSync(new URL("../agent-approval-console.js", import.meta.url), "utf8");
 const homepage = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
 const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
@@ -18,6 +20,17 @@ const threadsRoutes = ["/threads-config","/threads-oauth-start","/threads-discon
 for (const route of threadsRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing Threads route: ${route}`);
 const growthRoutes = ["/growth-profile", "/growth-run", "/growth-run-get", "/growth-review", "/growth-result"];
 for (const route of growthRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing Growth route: ${route}`);
+const approvalRoutes = ["/agent-proposal", "/agent-proposal-get", "/agent-proposal-list", "/agent-review", "/agent-execute"];
+for (const route of approvalRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing approval route: ${route}`);
+assert.match(workerV2, /APPROVAL_REQUIRED/);
+assert.match(approvalGate, /threads\.publish-post/);
+assert.match(approvalGate, /threads\.publish-reply/);
+assert.match(approvalGate, /APPROVAL_ALREADY_EXECUTED/);
+assert.match(approvalConsole, /查看 AI 建議/);
+assert.match(approvalConsole, /查看修改差異/);
+assert.match(approvalConsole, /批准執行/);
+assert.match(approvalConsole, /拒絕/);
+assert.match(homepage, /agent-approval-console\.js\?v=human-gate-v1/);
 assert.match(workerV2, /web_search_20250305/);
 assert.match(workerV2, /runGrowthResearch/);
 assert.match(workerV2, /baseWorker\.fetch/);
