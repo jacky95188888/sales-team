@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const worker = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
 const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
+const threadsGrowth = readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8");
 const deployWorker = readFileSync(new URL("../.github/workflows/deploy-worker.yml", import.meta.url), "utf8");
 const config = JSON.parse(
   readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
