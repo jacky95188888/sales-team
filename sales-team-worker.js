@@ -123,22 +123,36 @@ async function autoFinalizeThreadsDraft(env, id, config) {
   const record = JSON.parse((await env.MONITOR.get(key)) || "null");
   if (!record) throw new Error("DRAFT_NOT_FOUND");
   if (config.mode !== "auto") return { status: "waiting_review", draft: record };
+  const log = async (status, extra = {}) => {
+    const item = { draftId: record.id, topic: record.topic || "", status, at: Date.now(), ...extra };
+    await env.MONITOR.put("threads:growth:auto-execution:latest", JSON.stringify(item), { expirationTtl: 2592000 });
+    return item;
+  };
   record.status = "approved";
   record.autoApprovedAt = Date.now();
   record.updatedAt = record.autoApprovedAt;
   const text = String(record.post || "").trim();
-  if (!text || text.length > 5000) throw new Error("THREADS_TEXT_INVALID");
+  if (!text || text.length > 5000) {
+    await log("blocked_invalid_text");
+    throw new Error("THREADS_TEXT_INVALID");
+  }
   const test = { draftId: record.id, textLength: text.length, mediaType: "TEXT", testedAt: Date.now(), result: "ready_for_official_publish", automatic: true };
   record.lastTestedAt = test.testedAt;
   await env.MONITOR.put("threads:growth:test:" + record.id, JSON.stringify(test), { expirationTtl: 2592000 });
   await env.MONITOR.put(key, JSON.stringify(record), { expirationTtl: 2592000 });
-  if (!config.livePublishEnabled) return { status: "approved_waiting_live_enable", draft: record };
+  if (!config.livePublishEnabled) {
+    await log("approved_waiting_live_enable");
+    return { status: "approved_waiting_live_enable", draft: record };
+  }
   try {
     const published = await publishThreadsDraftInternal(env, record.id, config);
+    await log("published", { threadsPostId: published.threadsPostId || "" });
     return { status: "published", draft: published };
   } catch (error) {
-    await env.MONITOR.put("threads:growth:auto-publish-error:" + record.id, JSON.stringify({ at: Date.now(), error: String(error?.message || error).slice(0, 500) }), { expirationTtl: 604800 });
-    return { status: "publish_failed", error: String(error?.message || error), draft: JSON.parse((await env.MONITOR.get(key)) || "null") };
+    const message = String(error?.message || error).slice(0, 500);
+    await env.MONITOR.put("threads:growth:auto-publish-error:" + record.id, JSON.stringify({ at: Date.now(), error: message }), { expirationTtl: 604800 });
+    await log("publish_failed", { error: message });
+    return { status: "publish_failed", error: message, draft: JSON.parse((await env.MONITOR.get(key)) || "null") };
   }
 }
 
@@ -150,9 +164,11 @@ async function threadsGrowth(env, path, b) {
     const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
     const latestResearch = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
     const latestResearchError = JSON.parse((await env.MONITOR.get("threads:growth:auto-research-error")) || "null");
+    const latestAutoExecution = JSON.parse((await env.MONITOR.get("threads:growth:auto-execution:latest")) || "null");
     return {
       stage: "status",
       latestResearchError,
+      latestAutoExecution,
       autonomousResearchEnabled: true,
       latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
