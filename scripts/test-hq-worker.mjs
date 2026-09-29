@@ -45,7 +45,14 @@ async function post(path, body, headers) {
   return data;
 }
 
-const threadsStatus = await post("/threads-growth/status", {});
+const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
+const statusUnauthorized = await request("/threads-growth/status", {});
+assert.equal(statusUnauthorized.response.status, 401);
+assert.equal(statusUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
+const draftUnauthorized = await request("/threads-growth/draft", { topic: "must not run without owner PIN" });
+assert.equal(draftUnauthorized.response.status, 401);
+assert.equal(draftUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
+const threadsStatus = await post("/threads-growth/status", {}, approvalHeaders);
 assert.equal(threadsStatus.approvalConfigured, true);
 assert.equal(threadsStatus.oauthConnected, false);
 assert.equal(threadsStatus.livePublishEnabled, false);
@@ -60,7 +67,6 @@ assert.equal(researchUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
 const configUnauthorized = await request("/threads-growth/config", { action: "save", config: { livePublishEnabled: true } });
 assert.equal(configUnauthorized.response.status, 401);
 assert.equal(configUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
-const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
 const configSaved = await post("/threads-growth/config", { action: "save", config: { livePublishEnabled: false } }, approvalHeaders);
 assert.equal(configSaved.config.livePublishEnabled, false);
 assert.equal(configSaved.config.mode, "review");
