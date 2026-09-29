@@ -18,6 +18,7 @@ const ROUTES = new Set([
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/threads-growth/status",
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
@@ -80,6 +81,17 @@ async function threadsOAuthCallback(req, env) {
 async function threadsGrowth(env, path, b) {
   if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
   const cfgKey = "threads:growth:config";
+  if (path === "/threads-growth/status") {
+    const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
+    const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
+    return {
+      stage: "status",
+      approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
+      oauthConnected: !!(auth?.accessToken && auth?.userId) || !!(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID),
+      livePublishEnabled: !!config.livePublishEnabled,
+      safeDryRunAvailable: true
+    };
+  }
   if (path === "/threads-growth/config") {
     if ((b.action || "get") === "get") return { config: normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}")) };
     const config = normalizeThreadsConfig(b.config || b);
