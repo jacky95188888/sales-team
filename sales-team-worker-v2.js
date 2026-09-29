@@ -12,7 +12,8 @@ import { createApprovalRequest, getApprovalRequest, listApprovalRequests, review
 
 const ORIGIN = "https://jacky95188888.github.io";
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers } });
-function cors(req) { const origin = req.headers.get("Origin") || ORIGIN; return { "Access-Control-Allow-Origin": origin === ORIGIN ? origin : ORIGIN, "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", Vary: "Origin" }; }
+function cors(req) { const origin = req.headers.get("Origin") || ORIGIN; return { "Access-Control-Allow-Origin": origin === ORIGIN ? origin : ORIGIN, "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, X-Approval-Key", Vary: "Origin" }; }
+function requireApprovalKey(req, env) { const expected = String(env.APPROVAL_KEY || ""); if (!expected) throw Object.assign(new Error("APPROVAL_KEY_NOT_CONFIGURED"), { status: 503 }); const actual = String(req.headers.get("X-Approval-Key") || ""); if (!actual || actual !== expected) throw Object.assign(new Error("APPROVAL_UNAUTHORIZED"), { status: 401 }); }
 function collectSources(value, output = [], seen = new Set()) {
   if (!value || typeof value !== "object") return output;
   if (Array.isArray(value)) { for (const item of value) collectSources(item, output, seen); return output; }
@@ -75,15 +76,15 @@ export default {
       if (req.headers.get("Origin") && req.headers.get("Origin") !== ORIGIN) return json({ error: "ORIGIN_DENIED" }, 403, H);
       if (url.pathname === "/oauth/threads/callback" && req.method === "GET") { await threadsOauthCallback(req, env); const target = `${ORIGIN}/sales-team/?oauth=threads&result=connected`; return new Response(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="refresh" content="2;url=${target}"><body style="margin:0;background:#140b2d;color:#fff;font-family:system-ui;display:grid;place-items:center;min-height:100vh"><main style="padding:32px;border:1px solid #cda84a;border-radius:24px;background:#241742;text-align:center"><h1>✅ Threads 連線完成</h1><p>帳號已安全連接，尚未自動發布內容。</p><a style="color:#ffe291" href="${target}">返回顧問團</a></main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } }); }
       if (req.method !== "POST") return json({ error: "POST_ONLY" }, 405, H); const body = await req.json();
-      if (url.pathname === "/agent-proposal") return json(await createApprovalRequest(env, body), 200, H);
-      if (url.pathname === "/agent-proposal-get") return json(await getApprovalRequest(env, body.workspaceId, body.proposalId), 200, H);
-      if (url.pathname === "/agent-proposal-list") return json(await listApprovalRequests(env, body.workspaceId), 200, H);
-      if (url.pathname === "/agent-review") return json(await reviewApprovalRequest(env, body), 200, H);
-      if (url.pathname === "/agent-execute") return json(await executeApprovedRequest(env, body, async item => {
+      if (url.pathname === "/agent-proposal") { requireApprovalKey(req, env); return json(await createApprovalRequest(env, body), 200, H); }
+      if (url.pathname === "/agent-proposal-get") { requireApprovalKey(req, env); return json(await getApprovalRequest(env, body.workspaceId, body.proposalId), 200, H); }
+      if (url.pathname === "/agent-proposal-list") { requireApprovalKey(req, env); return json(await listApprovalRequests(env, body.workspaceId), 200, H); }
+      if (url.pathname === "/agent-review") { requireApprovalKey(req, env); return json(await reviewApprovalRequest(env, body), 200, H); }
+      if (url.pathname === "/agent-execute") { requireApprovalKey(req, env); return json(await executeApprovedRequest(env, body, async item => {
         if (item.action === "threads.publish-post") return threadsRoute(env, { ...item.payload, workspaceId: item.workspaceId, action: "publish-post" }, prompt => ai(env, prompt));
         if (item.action === "threads.publish-reply") return threadsRoute(env, { ...item.payload, workspaceId: item.workspaceId, action: "publish-reply" }, prompt => ai(env, prompt));
         throw Object.assign(new Error("APPROVAL_ACTION_NOT_ALLOWED"), { status: 400 });
-      }), 200, H);
+      }), 200, H); }
       if (url.pathname === "/growth-profile") return json(body.profile ? await putGrowthProfile(env, body.workspaceId, body.profile) : await getGrowthProfile(env, body.workspaceId), 200, H);
       if (url.pathname === "/growth-run") return json(await runGrowthResearch(env, body, (prompt, options) => ai(env, prompt, options)), 200, H);
       if (url.pathname === "/growth-run-get") return json(await getGrowthRun(env, body.workspaceId, body.runId), 200, H);
