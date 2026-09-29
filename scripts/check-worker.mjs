@@ -114,7 +114,7 @@ assert.match(worker, /threads_content_publish/);
 assert.match(worker, /X-Approval-Key/);
 assert.match(worker, /APPROVAL_KEY_NOT_CONFIGURED/);
 assert.match(worker, /APPROVAL_UNAUTHORIZED/);
-assert.ok(worker.includes('["/threads-growth/status", "/threads-growth/config", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts"'));
+assert.ok(worker.includes('["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts"'));
 assert.equal(config.vars.APPROVAL_KEY_SHA256.length, 64);
 assert.match(config.vars.APPROVAL_KEY_SHA256, /^[a-f0-9]{64}$/);
 assert.doesNotMatch(deployWorker, /secrets\.APPROVAL_KEY/);
@@ -162,7 +162,7 @@ for (const pattern of forbiddenPatterns) {
 
 console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
 
-assert.match(deployWorker, /for route in status config research research-now draft drafts approve publish/);
+assert.match(deployWorker, /for route in status config discover research research-now draft drafts approve test-publish publish/);
 assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
 assert.match(deployWorker, /for attempt in 1 2 3 4 5 6/);
 assert.match(deployWorker, /status" != "401"/);
@@ -242,3 +242,5 @@ assert.match(approvalConsole, /post\("\/threads-growth\/config", \{action:"save"
 // Manual draft creation became side-effect capable in auto mode, so the mobile console must attach the approval PIN.
 assert.match(approvalConsole, /post\("\/threads-growth\/draft", \{topic:topic, context:context\}, true\)/);
 assert.doesNotMatch(approvalConsole, /post\("\/threads-growth\/draft", \{topic:topic, context:context\}, false\)/);
+
+assert.match(approvalConsole, /post\("\/threads-growth\/test-publish", \{draftId:item\.id\}, true\)/);
