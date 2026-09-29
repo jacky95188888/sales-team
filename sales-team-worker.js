@@ -21,6 +21,7 @@ const ROUTES = new Set([
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
+  "/threads-growth/drafts",
   "/threads-growth/approve",
   "/threads-growth/test-publish",
   "/threads-growth/publish",
@@ -98,6 +99,16 @@ async function threadsGrowth(env, path, b) {
     const record = { id, status: "pending_review", topic: String(b.topic || "").slice(0, 300), ...draft, createdAt: Date.now(), updatedAt: Date.now() };
     await env.MONITOR.put("threads:growth:draft:" + id, JSON.stringify(record), { expirationTtl: 2592000 });
     return { stage: "draft", draft: record };
+  }
+  if (path === "/threads-growth/drafts") {
+    const page = await env.MONITOR.list({ prefix: "threads:growth:draft:", limit: 50 });
+    const drafts = [];
+    for (const item of page.keys || []) {
+      const record = JSON.parse((await env.MONITOR.get(item.name)) || "null");
+      if (record) drafts.push(record);
+    }
+    drafts.sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+    return { stage: "drafts", drafts: drafts.slice(0, 30) };
   }
   if (path === "/threads-growth/approve") {
     const id = String(b.draftId || "").slice(0, 100);
@@ -193,10 +204,25 @@ function cors(req) {
   return {
     "Access-Control-Allow-Origin": o === ORIGIN ? o : ORIGIN,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Approval-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
+}
+async function requireThreadsApproval(req, env) {
+  const expectedHash = String(env.APPROVAL_KEY_SHA256 || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(expectedHash))
+    throw Object.assign(new Error("APPROVAL_KEY_NOT_CONFIGURED"), { status: 503 });
+  const actual = String(req.headers.get("X-Approval-Key") || "");
+  if (!actual)
+    throw Object.assign(new Error("APPROVAL_UNAUTHORIZED"), { status: 401 });
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(actual));
+  const actualHash = [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, "0")).join("");
+  let diff = actualHash.length ^ expectedHash.length;
+  for (let i = 0; i < Math.min(actualHash.length, expectedHash.length); i++)
+    diff |= actualHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+  if (diff !== 0)
+    throw Object.assign(new Error("APPROVAL_UNAUTHORIZED"), { status: 401 });
 }
 function profile(p) {
   if (!p || typeof p !== "object") return "【產品資料】未提供；不可編造數字。";
@@ -2171,8 +2197,11 @@ export default {
       }
       if (url.pathname === "/threads-growth/oauth-start")
         return json(await threadsOAuthStart(req, env), 200, H);
-      if (url.pathname.startsWith("/threads-growth/"))
+      if (url.pathname.startsWith("/threads-growth/")) {
+        if (["/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/publish"].includes(url.pathname))
+          await requireThreadsApproval(req, env);
         return json(await threadsGrowth(env, url.pathname, b), 200, H);
+      }
       if (url.pathname === "/monitor-config")
         return json(await monitorConfig(env, b), 200, H);
       if (url.pathname === "/monitor-subscribe")

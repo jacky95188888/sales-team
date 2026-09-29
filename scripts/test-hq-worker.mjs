@@ -13,9 +13,12 @@ class MemoryKV {
   async get(key) { return this.data.has(key) ? this.data.get(key) : null; }
   async put(key, value) { this.data.set(key, String(value)); }
   async delete(key) { this.data.delete(key); }
+  async list({ prefix = "", limit = 1000 } = {}) {
+    return { keys: [...this.data.keys()].filter(k => k.startsWith(prefix)).slice(0, limit).map(name => ({ name })), list_complete: true };
+  }
 }
 
-const env = { MONITOR: new MemoryKV() };
+const env = { MONITOR: new MemoryKV(), APPROVAL_KEY_SHA256: "7f90e0a4e15687175dac49969d36d96420cb659376a5ddca5be22853e7a7324b" };
 const origin = "https://jacky95188888.github.io";
 const workspaceId = "sanbao_0123456789abcdef0123456789abcdef0123";
 
@@ -42,12 +45,18 @@ async function post(path, body, headers) {
   return data;
 }
 
-const threadsApproved = await post("/threads-growth/approve", { draftId: "th_test" });
+const threadsUnauthorized = await request("/threads-growth/approve", { draftId: "th_test" });
+assert.equal(threadsUnauthorized.response.status, 401);
+assert.equal(threadsUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
+const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
+const threadsList = await post("/threads-growth/drafts", {}, approvalHeaders);
+assert.equal(threadsList.drafts[0].id, "th_test");
+const threadsApproved = await post("/threads-growth/approve", { draftId: "th_test" }, approvalHeaders);
 assert.equal(threadsApproved.draft.status, "approved");
 const threadsDryRun = await post("/threads-growth/test-publish", { draftId: "th_test" });
 assert.equal(threadsDryRun.dryRun, true);
 assert.equal(threadsDryRun.test.result, "ready_for_official_publish");
-const threadsBlocked = await request("/threads-growth/publish", { draftId: "th_test" });
+const threadsBlocked = await request("/threads-growth/publish", { draftId: "th_test" }, approvalHeaders);
 assert.equal(threadsBlocked.response.status, 409);
 assert.equal(threadsBlocked.data.error, "THREADS_LIVE_PUBLISH_DISABLED");
 

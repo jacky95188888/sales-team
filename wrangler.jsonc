@@ -9,9 +9,16 @@
     }
   ],
   "triggers": {
-    "crons": ["0 1 * * *", "0 6 * * *", "0 13 * * *"]
+    "crons": [
+      "0 1 * * *",
+      "0 6 * * *",
+      "0 13 * * *"
+    ]
   },
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    "APPROVAL_KEY_SHA256": "d718e1af8575614c8df712fe19b9acb942aa47a34f61545a74b30a7755faef82"
   }
 }
