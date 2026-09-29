@@ -87,8 +87,10 @@ async function threadsGrowth(env, path, b) {
     const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
     const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
     const latestResearch = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
+    const latestResearchError = JSON.parse((await env.MONITOR.get("threads:growth:auto-research-error")) || "null");
     return {
       stage: "status",
+      latestResearchError,
       autonomousResearchEnabled: true,
       latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
@@ -113,9 +115,11 @@ async function threadsGrowth(env, path, b) {
     return { stage: "research", report: latest };
   }
   if (path === "/threads-growth/research-now") {
-    await threadsAutonomousResearch(env, { cron: "0 1 * * *" });
+    const result = await threadsAutonomousResearch(env, { cron: "0 1 * * *" });
+    if (result?.status === "failed")
+      throw Object.assign(new Error("研究失敗：" + result.error), { status: 502 });
     const latest = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
-    return { stage: "research-now", report: latest };
+    return { stage: "research-now", runStatus: result?.status || "skipped", report: latest };
   }
   if (path === "/threads-growth/draft") {
     const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
@@ -2137,7 +2141,7 @@ async function threadsAutonomousResearch(env, event) {
   if (!env.MONITOR || event?.cron !== "0 1 * * *") return;
   const today = taiwanDay();
   const marker = "threads:growth:auto-research:" + today;
-  if (await env.MONITOR.get(marker)) return;
+  if (await env.MONITOR.get(marker)) return { status: "already_completed", date: today };
   try {
     const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}"));
     if (!config.enabled) return;
@@ -2148,6 +2152,7 @@ async function threadsAutonomousResearch(env, event) {
       .filter((x) => x && String(x.topic || "").trim())
       .sort((a, b) => Number(a.priority || 99) - Number(b.priority || 99))
       .slice(0, 6);
+    if (!candidates.length) throw new Error("NO_RESEARCH_CANDIDATES");
     const report = {
       id: "research_" + today.replace(/-/g, ""),
       date: today,
@@ -2159,7 +2164,8 @@ async function threadsAutonomousResearch(env, event) {
     await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
 
     const writable = candidates.filter((x) => String(x.decision || "值得寫") === "值得寫");
-    const count = Math.min(config.postsPerDay, writable.length);
+    // Candidate drafts are separate from the daily publishing limit.
+    const count = Math.min(3, writable.length);
     const drafts = [];
     for (let i = 0; i < count; i++) {
       const c = writable[i];
@@ -2193,12 +2199,12 @@ async function threadsAutonomousResearch(env, event) {
     await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
     await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
     await env.MONITOR.put(marker, "done", { expirationTtl: 172800 });
+    await env.MONITOR.delete("threads:growth:auto-research-error");
+    return { status: "completed", date: today, draftCount: drafts.length };
   } catch (error) {
-    await env.MONITOR.put(
-      "threads:growth:auto-research-error",
-      JSON.stringify({ at: Date.now(), error: String(error?.message || error).slice(0, 500) }),
-      { expirationTtl: 604800 }
-    );
+    const detail = { at: Date.now(), date: today, error: String(error?.message || error).slice(0, 500) };
+    await env.MONITOR.put("threads:growth:auto-research-error", JSON.stringify(detail), { expirationTtl: 604800 });
+    return { status: "failed", ...detail };
   }
 }
 
