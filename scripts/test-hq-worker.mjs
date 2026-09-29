@@ -45,10 +45,15 @@ async function post(path, body, headers) {
   return data;
 }
 
+const configUnauthorized = await request("/threads-growth/config", { action: "save", config: { livePublishEnabled: true } });
+assert.equal(configUnauthorized.response.status, 401);
+assert.equal(configUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
+const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
+const configSaved = await post("/threads-growth/config", { action: "save", config: { livePublishEnabled: false } }, approvalHeaders);
+assert.equal(configSaved.config.livePublishEnabled, false);
 const threadsUnauthorized = await request("/threads-growth/approve", { draftId: "th_test" });
 assert.equal(threadsUnauthorized.response.status, 401);
 assert.equal(threadsUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
-const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
 const threadsList = await post("/threads-growth/drafts", {}, approvalHeaders);
 assert.equal(threadsList.drafts[0].id, "th_test");
 const threadsApproved = await post("/threads-growth/approve", { draftId: "th_test" }, approvalHeaders);

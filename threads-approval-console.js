@@ -98,7 +98,16 @@
       status("正在執行你剛批准的 Threads 發布…");
       await post("/threads-growth/publish", {draftId:item.id}, true);
       await refresh(); status("Threads 已完成發布。");
-    } catch(e) { status(e.message, true); }
+    } catch(e) {
+      if (String(e.message).includes("THREADS_LIVE_PUBLISH_DISABLED") && confirm("正式發布開關目前關閉。要現在開啟後再發布這篇嗎？")) {
+        try {
+          await post("/threads-growth/config", {action:"save", config:{livePublishEnabled:true}}, true);
+          await post("/threads-growth/publish", {draftId:item.id}, true);
+          await refresh(); status("Threads 已完成發布。"); return;
+        } catch(e2) { return status(e2.message, true); }
+      }
+      status(e.message, true);
+    }
   }
   function mount() {
     var tabs=el("tabs"), wrap=document.querySelector(".wrap");
