@@ -162,7 +162,9 @@ console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
 
 assert.match(deployWorker, /for route in config research drafts approve publish/);
 assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
-assert.match(deployWorker, /test "\$status" = "401"/);
+assert.match(deployWorker, /for attempt in 1 2 3 4 5 6/);
+assert.match(deployWorker, /status" != "401"/);
+assert.match(deployWorker, /test "\$verified" = "1"/);
 
 // Autonomous Threads research must remain review-only and scheduled once per Taiwan morning.
 assert.match(worker, /threadsAutonomousResearch/);
