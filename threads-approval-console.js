@@ -63,9 +63,14 @@
   }
   async function readiness() {
     try {
-      var d = await post("/threads-growth/status", {}, false);
+      var d = await post("/threads-growth/status", {}, true);
       var box = el("threadsGateReady");
       if (box) box.innerHTML =
+        (d.todaySummary ? '<div class="out"><b>📊 今日顧問團摘要｜'+esc(d.todaySummary.date||"")+'</b><br>' +
+          (d.todaySummary.researched ? '✅ 已完成今日研究' : '⏳ 今日尚未研究') + '｜候選 '+Number(d.todaySummary.candidateCount||0)+' 題｜草稿 '+Number(d.todaySummary.draftCount||0)+' 份<br>' +
+          '📝 待你審核 '+Number(d.todaySummary.pendingReviewCount||0)+' 份｜🚀 今日已發布 '+Number(d.todaySummary.publishedCount||0)+' 篇' +
+          (Number(d.todaySummary.autoPublishedCount||0) ? '（全自動 '+Number(d.todaySummary.autoPublishedCount||0)+'）' : '') +
+          '</div>' : '') +
         '<div class="out"><b>執行狀態</b><br>' +
         (d.approvalConfigured ? '✅ PIN 安全閘門已設定' : '❌ PIN 安全閘門未設定') + '<br>' +
         (d.oauthConnected ? '✅ Threads 官方授權已連線' : '⚠️ Threads 尚未完成官方授權') + '<br>' +
@@ -101,9 +106,14 @@
     } catch(e) { status(e.message, true); }
   }
   async function researchNow() {
-    if (!confirm("現在立即讓顧問團研究今天值得討論的題目？只會研究與產生待審草稿，不會發布。")) return;
     try {
-      status("顧問團正在上網研究今天的題目，完成後會放進待審核。");
+      var current = await post("/threads-growth/status", {}, true);
+      var auto = current.mode === "auto";
+      var prompt = auto
+        ? "目前是【全自動模式】。立即研究後，顧問團會研究、討論、寫稿、安全檢查，符合條件且官方 Threads 授權有效時可能直接公開發布。確定執行？"
+        : "目前是【經我同意模式】。立即研究只會研究、討論與產生待審草稿，不會自行公開發布。確定執行？";
+      if (!confirm(prompt)) return;
+      status(auto ? "顧問團正在研究；目前為全自動模式，合格內容可能直接發布。" : "顧問團正在研究，完成後會放進待審核。");
       var result = await post("/threads-growth/research-now", {}, true);
       await refresh();
       status(result.runStatus === "already_completed"

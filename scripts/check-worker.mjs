@@ -213,3 +213,13 @@ assert.match(approvalConsole, /最近自動執行/);
 assert.match(worker, /threads:growth:auto-execution:history/);
 assert.match(worker, /autoExecutionHistory: autoExecutionHistory\.slice\(0, 10\)/);
 assert.match(approvalConsole, /最近自動工作紀錄/);
+
+// Owner dashboard must use the protected status route and explain research-now according to the active mode.
+assert.match(worker, /todaySummary:/);
+assert.match(worker, /pendingReviewCount: pendingToday/);
+assert.match(worker, /publishedCount: publishedToday/);
+assert.match(approvalConsole, /今日顧問團摘要/);
+assert.match(approvalConsole, /post\("\/threads-growth\/status", \{\}, true\)/);
+assert.match(approvalConsole, /目前是【全自動模式】/);
+assert.match(approvalConsole, /可能直接公開發布/);
+assert.match(approvalConsole, /目前是【經我同意模式】/);
