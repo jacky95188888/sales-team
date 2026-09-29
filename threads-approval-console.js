@@ -229,7 +229,7 @@
   }
   async function dry(item) {
     try {
-      var d=await post("/threads-growth/test-publish", {draftId:item.id}, false);
+      var d=await post("/threads-growth/test-publish", {draftId:item.id}, true);
       status(d.message || "安全測試完成，沒有公開發布。");
     } catch(e) { status(e.message, true); }
   }
