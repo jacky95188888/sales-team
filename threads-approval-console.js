@@ -215,7 +215,7 @@
     if (!topic) return status("請先填一個題目。", true);
     try {
       status("AI 正在處理這個題目；是否直接發布會依目前運作模式決定。");
-      await post("/threads-growth/draft", {topic:topic, context:context}, false);
+      await post("/threads-growth/draft", {topic:topic, context:context}, true);
       await refresh();
     } catch(e) { status(e.message, true); }
   }
