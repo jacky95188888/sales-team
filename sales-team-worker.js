@@ -84,8 +84,11 @@ async function threadsGrowth(env, path, b) {
   if (path === "/threads-growth/status") {
     const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
     const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
+    const latestResearch = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
     return {
       stage: "status",
+      autonomousResearchEnabled: true,
+      latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
       oauthConnected: !!(auth?.accessToken && auth?.userId) || !!(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID),
       livePublishEnabled: !!config.livePublishEnabled,
