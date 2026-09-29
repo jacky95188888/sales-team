@@ -23,6 +23,8 @@ for (const route of growthRoutes) assert.ok(workerV2.includes(`"${route}"`), `Mi
 const approvalRoutes = ["/agent-proposal", "/agent-proposal-get", "/agent-proposal-list", "/agent-review", "/agent-execute"];
 for (const route of approvalRoutes) assert.ok(workerV2.includes(`"${route}"`), `Missing approval route: ${route}`);
 assert.match(workerV2, /APPROVAL_REQUIRED/);
+assert.match(workerV2, /X-Approval-Key/);
+assert.match(workerV2, /APPROVAL_UNAUTHORIZED/);
 assert.match(approvalGate, /threads\.publish-post/);
 assert.match(approvalGate, /threads\.publish-reply/);
 assert.match(approvalGate, /APPROVAL_ALREADY_EXECUTED/);
@@ -101,7 +103,7 @@ assert.equal(config.kv_namespaces?.[0]?.binding, "MONITOR");
 assert.ok(config.kv_namespaces?.[0]?.id, "MONITOR namespace ID is missing");
 assert.deepEqual(config.triggers?.crons, ["0 1 * * *","0 6 * * *","0 13 * * *"]);
 assert.deepEqual(config.secrets?.required, ["ANTHROPIC_KEY"]);
-for (const secret of ["HEYGEN_API_KEY","PUBLISH_TOKEN_KEY","YOUTUBE_CLIENT_ID","YOUTUBE_CLIENT_SECRET","TIKTOK_CLIENT_KEY","TIKTOK_CLIENT_SECRET","THREADS_APP_ID","THREADS_APP_SECRET"]) assert.ok(config.secrets?.optional?.includes(secret), `Missing optional secret declaration: ${secret}`);
+for (const secret of ["HEYGEN_API_KEY","PUBLISH_TOKEN_KEY","YOUTUBE_CLIENT_ID","YOUTUBE_CLIENT_SECRET","TIKTOK_CLIENT_KEY","TIKTOK_CLIENT_SECRET","THREADS_APP_ID","THREADS_APP_SECRET","APPROVAL_KEY"]) assert.ok(config.secrets?.optional?.includes(secret), `Missing optional secret declaration: ${secret}`);
 
 const filesToScan = [worker, workerV2, threadsBridge, threadsService, threadsAdapter, JSON.stringify(config), readFileSync(new URL("../WORKER-RECOVERY.md", import.meta.url), "utf8")];
 const forbiddenPatterns = [/sk-ant-[A-Za-z0-9_-]{16,}/,/ANTHROPIC_KEY\s*[:=]\s*["'][^"']+["']/,/THREADS_APP_SECRET\s*[:=]\s*["'][^"']+["']/,/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/];
