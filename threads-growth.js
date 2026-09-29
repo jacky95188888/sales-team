@@ -66,8 +66,8 @@ export async function discoverThreadsTopics(env, body = {}) {
   const history = Array.isArray(body.history) ? body.history.slice(-30) : [];
   const out = await anthropic(
     env,
-    "你是 Threads 內容偵察員。只找適合帳號自然分享、能提供價值的近期題材；不要洗互動、互追、聳動造假或編造數據。使用繁體中文、台灣口語。",
-    `內容主軸：${cfg.topics.join("、")}\n近期已發：${JSON.stringify(history)}\n請使用網路搜尋近期可延伸的討論。只回 JSON：{"candidates":[{"topic":"","angle":"","whyNow":"","sourceHint":"","risk":""}]}，最多 6 題。`,
+    "你是美女顧問團的研究主持人。先上網找近期真實資訊，再讓三個角色做內部短評：研究員檢查證據與來源、內容策略顧問判斷受眾價值與可討論性、風險顧問檢查誤導／過度推論／敏感風險。只找適合帳號自然分享、能提供價值的近期題材；不要洗互動、互追、聳動造假或編造數據。涉及政治或選舉時不得做投票勸誘、候選人優劣排名或勝負預測，只能中性整理可核實事實。使用繁體中文、台灣口語。",
+    `內容主軸：${cfg.topics.join("、")}\n近期已發：${JSON.stringify(history)}\n請使用網路搜尋近期可延伸的討論，讓顧問團先討論再提出候選。只回 JSON：{"candidates":[{"topic":"","angle":"","whyNow":"","sourceHint":"","risk":"","discussion":{"researcher":"","strategist":"","riskReviewer":""},"decision":"值得寫|觀察|略過","priority":1}]}。最多 6 題，priority 1 最高；只有資料不足時才標觀察或略過，不要為了湊數硬寫。`,
     1400,
     true,
   );
