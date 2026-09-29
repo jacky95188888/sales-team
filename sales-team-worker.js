@@ -170,11 +170,30 @@ async function threadsGrowth(env, path, b) {
     const latestResearchError = JSON.parse((await env.MONITOR.get("threads:growth:auto-research-error")) || "null");
     const latestAutoExecution = JSON.parse((await env.MONITOR.get("threads:growth:auto-execution:latest")) || "null");
     const autoExecutionHistory = JSON.parse((await env.MONITOR.get("threads:growth:auto-execution:history")) || "[]");
+    const today = taiwanDay();
+    const publishHistory = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    const draftPage = await env.MONITOR.list({ prefix: "threads:growth:draft:", limit: 50 });
+    let pendingToday = 0;
+    for (const item of draftPage.keys || []) {
+      const draft = JSON.parse((await env.MONITOR.get(item.name)) || "null");
+      if (draft?.status === "pending_review" && taiwanDay(Number(draft.createdAt || 0)) === today) pendingToday++;
+    }
+    const publishedToday = publishHistory.filter((x) => taiwanDay(Number(x.publishedAt || 0)) === today).length;
+    const autoPublishedToday = autoExecutionHistory.filter((x) => x?.status === "published" && taiwanDay(Number(x.at || 0)) === today).length;
     return {
       stage: "status",
       latestResearchError,
       latestAutoExecution,
       autoExecutionHistory: autoExecutionHistory.slice(0, 10),
+      todaySummary: {
+        date: today,
+        researched: latestResearch?.date === today,
+        candidateCount: latestResearch?.date === today ? (latestResearch.candidates || []).length : 0,
+        draftCount: latestResearch?.date === today ? (latestResearch.draftIds || []).length : 0,
+        pendingReviewCount: pendingToday,
+        publishedCount: publishedToday,
+        autoPublishedCount: autoPublishedToday
+      },
       autonomousResearchEnabled: true,
       latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
