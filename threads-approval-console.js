@@ -88,6 +88,7 @@
         (d.latestResearch ? '📝 最近研究：' + esc(d.latestResearch.date) + '，候選 ' + Number(d.latestResearch.candidateCount||0) + ' 題／待審草稿 ' + Number(d.latestResearch.draftCount||0) + ' 份<br>' : '') +
         (d.latestResearchError ? '⚠️ 最近研究失敗（' + esc(d.latestResearchError.date||"") + '）：' + esc(d.latestResearchError.error||"") + '<br>' : '') +
         (d.latestAutoExecution ? '📡 最近自動執行：' + esc(d.latestAutoExecution.status||"") + (d.latestAutoExecution.topic ? '｜' + esc(d.latestAutoExecution.topic) : '') + '<br>' : '') +
+        (d.latestInsightsSync ? '📈 最近成效同步：' + esc(d.latestInsightsSync.status||"") + '｜檢查 ' + Number(d.latestInsightsSync.checked||0) + ' 篇／更新 ' + Number(d.latestInsightsSync.updated||0) + ' 篇' + (Number(d.latestInsightsSync.failed||0) ? '／失敗 '+Number(d.latestInsightsSync.failed||0)+' 篇' : '') + '<br>' : '') +
         '✅ 安全測試可用</div>' +
         (Array.isArray(d.autoExecutionHistory) && d.autoExecutionHistory.length
           ? '<details class="out" style="margin-top:8px"><summary><b>📋 最近自動工作紀錄</b></summary>' +
