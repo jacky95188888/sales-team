@@ -223,3 +223,8 @@ assert.match(approvalConsole, /post\("\/threads-growth\/status", \{\}, true\)/);
 assert.match(approvalConsole, /目前是【全自動模式】/);
 assert.match(approvalConsole, /可能直接公開發布/);
 assert.match(approvalConsole, /目前是【經我同意模式】/);
+
+// Mobile refresh obtains the approval PIN once before parallel protected reads.
+assert.match(approvalConsole, /var key = approvalKey\(false\)/);
+assert.match(approvalConsole, /Promise\.all\(\[/);
+assert.match(approvalConsole, /readiness\(\),[\s\S]*researchReport\(\),[\s\S]*post\("\/threads-growth\/drafts", \{\}, true\)/);

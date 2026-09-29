@@ -150,12 +150,21 @@
     }
   }
   async function refresh() {
-    readiness();
-    researchReport();
     try {
-      status("正在讀取待審核草稿…");
-      var d = await post("/threads-growth/drafts", {}, true);
-      cache = d.drafts || []; renderDrafts(); status("已更新。正式發布仍需你親自按下確認。");
+      // Ask once before launching protected reads. Without this, parallel status,
+      // research and draft requests can each open their own PIN prompt on mobile.
+      var key = approvalKey(false);
+      if (!key) throw new Error("需要執行閘門 PIN");
+      status("正在更新今日摘要、研究報告與待審核草稿…");
+      var results = await Promise.all([
+        readiness(),
+        researchReport(),
+        post("/threads-growth/drafts", {}, true)
+      ]);
+      var d = results[2] || {};
+      cache = d.drafts || [];
+      renderDrafts();
+      status("已更新。後續是否自動發布，依你目前選擇的運作模式。");
     } catch(e) { status(e.message, true); }
   }
   async function createDraft() {
