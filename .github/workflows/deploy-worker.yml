@@ -63,10 +63,25 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
 
-      - name: Verify public Worker endpoint
+      - name: Verify public Worker endpoint and approval gate
         run: |
+          base='https://sales-team.rhtm9y855y.workers.dev'
+
           status=$(curl --silent --show-error --output response.json --write-out '%{http_code}' \
             --header 'Origin: https://jacky95188888.github.io' \
-            https://sales-team.rhtm9y855y.workers.dev/monitor-notes)
+            "$base/monitor-notes")
           test "$status" = "200"
           jq -e 'has("notes")' response.json >/dev/null
+
+          # Production safety smoke test: protected Threads routes must reject
+          # requests that do not carry the human approval PIN.
+          for route in config drafts approve publish; do
+            status=$(curl --silent --show-error --output "gate-$route.json" --write-out '%{http_code}' \
+              --request POST \
+              --header 'Origin: https://jacky95188888.github.io' \
+              --header 'Content-Type: application/json' \
+              --data '{}' \
+              "$base/threads-growth/$route")
+            test "$status" = "401"
+            jq -e '.error == "APPROVAL_UNAUTHORIZED"' "gate-$route.json" >/dev/null
+          done
