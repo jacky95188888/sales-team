@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const worker = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
 const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
+const deployWorker = readFileSync(new URL("../.github/workflows/deploy-worker.yml", import.meta.url), "utf8");
 const config = JSON.parse(
   readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
 );
@@ -109,6 +110,9 @@ assert.match(worker, /threads_content_publish/);
 assert.match(worker, /X-Approval-Key/);
 assert.match(worker, /APPROVAL_KEY_NOT_CONFIGURED/);
 assert.match(worker, /APPROVAL_UNAUTHORIZED/);
+assert.match(deployWorker, /secrets\.APPROVAL_KEY/);
+assert.match(deployWorker, /test -n "\$APPROVAL_KEY"/);
+assert.match(deployWorker, /^\s+APPROVAL_KEY\s*$/m);
 assert.match(worker, /threads:growth:draft:/);
 const approvalConsole = readFileSync(new URL("../threads-approval-console.js", import.meta.url), "utf8");
 assert.match(approvalConsole, /查看 AI 建議／完整草稿/);
