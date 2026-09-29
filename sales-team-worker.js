@@ -118,6 +118,48 @@ async function publishThreadsDraftInternal(env, id, config) {
   return record;
 }
 
+async function threadsSyncOfficialInsights(env, event) {
+  // 21:00 Taiwan: refresh recent published post performance from the official Threads Insights API.
+  if (!env.MONITOR || event?.cron !== "0 13 * * *") return;
+  const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
+  const accessToken = auth?.accessToken || env.THREADS_ACCESS_TOKEN;
+  if (!accessToken) return { status: "skipped_no_auth" };
+  const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+  const cutoff = Date.now() - 7 * 86400000;
+  const targets = history.filter((x) => x?.threadsPostId && Number(x.publishedAt || 0) >= cutoff).slice(-30);
+  let updated = 0, failed = 0;
+  const errors = [];
+  for (const row of targets) {
+    try {
+      const u = new URL("https://graph.threads.net/v1.0/" + encodeURIComponent(row.threadsPostId) + "/insights");
+      u.searchParams.set("metric", "views,likes,replies,reposts");
+      u.searchParams.set("access_token", accessToken);
+      const response = await fetch(u.toString());
+      const data = await response.json();
+      if (!response.ok) throw new Error("THREADS_INSIGHTS_FAILED:" + JSON.stringify(data).slice(0, 240));
+      const metrics = {};
+      for (const item of Array.isArray(data?.data) ? data.data : []) {
+        const name = String(item?.name || "");
+        if (!["views", "likes", "replies", "reposts"].includes(name)) continue;
+        const values = Array.isArray(item?.values) ? item.values : [];
+        metrics[name] = Math.max(0, Number(values[values.length - 1]?.value ?? item?.value ?? 0) || 0);
+      }
+      Object.assign(row, metrics, { measuredAt: Date.now() });
+      updated++;
+    } catch (error) {
+      failed++;
+      errors.push({ threadsPostId: String(row.threadsPostId).slice(0, 100), error: String(error?.message || error).slice(0, 300) });
+    }
+  }
+  const keptHistory = history.slice(-200);
+  await env.MONITOR.put("threads:growth:history", JSON.stringify(keptHistory));
+  const learned = learnFromThreadsMetrics(keptHistory);
+  await env.MONITOR.put("threads:growth:learned", JSON.stringify(learned));
+  const result = { status: failed ? (updated ? "partial" : "failed") : "success", checked: targets.length, updated, failed, at: Date.now(), errors: errors.slice(0, 3) };
+  await env.MONITOR.put("threads:growth:insights-sync:latest", JSON.stringify(result), { expirationTtl: 2592000 });
+  return result;
+}
+
 async function autoFinalizeThreadsDraft(env, id, config) {
   const key = "threads:growth:draft:" + String(id || "").slice(0, 100);
   const record = JSON.parse((await env.MONITOR.get(key)) || "null");
@@ -173,6 +215,7 @@ async function threadsGrowth(env, path, b) {
     const today = taiwanDay();
     const publishHistory = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
     const learned = JSON.parse((await env.MONITOR.get("threads:growth:learned")) || "null");
+    const latestInsightsSync = JSON.parse((await env.MONITOR.get("threads:growth:insights-sync:latest")) || "null");
     const draftPage = await env.MONITOR.list({ prefix: "threads:growth:draft:", limit: 50 });
     let pendingToday = 0;
     for (const item of draftPage.keys || []) {
@@ -186,6 +229,7 @@ async function threadsGrowth(env, path, b) {
       latestResearchError,
       latestAutoExecution,
       autoExecutionHistory: autoExecutionHistory.slice(0, 10),
+      latestInsightsSync,
       learningSummary: learned ? {
         sampleSize: Number(learned.sampleSize || 0),
         note: String(learned.note || "").slice(0, 300),
@@ -2387,6 +2431,7 @@ export default {
         e?.cron === "0 1 * * *" ? monitorScheduled(env) : Promise.resolve(),
         hqScheduled(env, e),
         threadsAutonomousResearch(env, e),
+        threadsSyncOfficialInsights(env, e),
       ]);
       await hqProcessAutoPublish(env);
     })());
