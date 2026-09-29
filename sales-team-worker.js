@@ -281,9 +281,30 @@ async function threadsGrowth(env, path, b) {
     return { stage: "publish", ok: true, draft: record };
   }
   if (path === "/threads-growth/metrics") {
-    const rows = Array.isArray(b.rows) ? b.rows.slice(-200) : [];
-    await env.MONITOR.put("threads:growth:history", JSON.stringify(rows));
-    return { stage: "metrics", saved: rows.length };
+    const incoming = Array.isArray(b.rows) ? b.rows.slice(-200) : [];
+    const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    const metricFields = ["views", "likes", "replies", "reposts", "measuredAt"];
+    let merged = 0;
+    for (const row of incoming) {
+      if (!row || typeof row !== "object") continue;
+      const draftId = String(row.draftId || "").slice(0, 100);
+      const threadsPostId = String(row.threadsPostId || "").slice(0, 100);
+      const index = history.findIndex((x) =>
+        (draftId && String(x.draftId || "") === draftId) ||
+        (threadsPostId && String(x.threadsPostId || "") === threadsPostId)
+      );
+      if (index < 0) continue;
+      const next = { ...history[index] };
+      for (const field of metricFields) {
+        if (row[field] !== undefined) next[field] = field === "measuredAt"
+          ? Math.max(0, Number(row[field]) || Date.now())
+          : Math.max(0, Number(row[field]) || 0);
+      }
+      history[index] = next;
+      merged++;
+    }
+    await env.MONITOR.put("threads:growth:history", JSON.stringify(history.slice(-200)));
+    return { stage: "metrics", received: incoming.length, merged, ignored: incoming.length - merged };
   }
   if (path === "/threads-growth/learn") {
     const rows = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
@@ -2398,7 +2419,7 @@ export default {
       if (url.pathname === "/threads-growth/oauth-start")
         return json(await threadsOAuthStart(req, env), 200, H);
       if (url.pathname.startsWith("/threads-growth/")) {
-        if (["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/test-publish", "/threads-growth/publish"].includes(url.pathname))
+        if (["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/test-publish", "/threads-growth/publish", "/threads-growth/metrics", "/threads-growth/learn"].includes(url.pathname))
           await requireThreadsApproval(req, env);
         return json(await threadsGrowth(env, url.pathname, b), 200, H);
       }
