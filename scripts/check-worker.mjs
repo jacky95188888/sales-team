@@ -27,6 +27,7 @@ const requiredRoutes = [
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
+  "/threads-growth/research",
   "/threads-growth/drafts",
   "/threads-growth/approve",
   "/threads-growth/test-publish",
@@ -169,3 +170,6 @@ assert.match(worker, /autonomous_daily_research/);
 assert.match(worker, /threads:growth:research:latest/);
 assert.match(worker, /event\?\.cron !== "0 1 \* \* \*"/);
 assert.match(approvalConsole, /不必先下主題/);
+
+assert.match(approvalConsole, /今日自動研究報告/);
+assert.match(approvalConsole, /threads-growth\\/research/);
