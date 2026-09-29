@@ -74,6 +74,7 @@
         (d.autonomousResearchEnabled ? '🤖 每日上午自動找題研究，不必先下主題' : '⚠️ 自動研究未開啟') + '<br>' +
         (d.latestResearch ? '📝 最近研究：' + esc(d.latestResearch.date) + '，候選 ' + Number(d.latestResearch.candidateCount||0) + ' 題／待審草稿 ' + Number(d.latestResearch.draftCount||0) + ' 份<br>' : '') +
         (d.latestResearchError ? '⚠️ 最近研究失敗（' + esc(d.latestResearchError.date||"") + '）：' + esc(d.latestResearchError.error||"") + '<br>' : '') +
+        (d.latestAutoExecution ? '📡 最近自動執行：' + esc(d.latestAutoExecution.status||"") + (d.latestAutoExecution.topic ? '｜' + esc(d.latestAutoExecution.topic) : '') + '<br>' : '') +
         '✅ 安全測試可用</div>';
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }
