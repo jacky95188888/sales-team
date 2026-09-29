@@ -238,3 +238,7 @@ assert.match(approvalConsole, /enableLivePublish/);
 assert.match(approvalConsole, /全自動模式下，通過研究與安全檢查的內容之後可直接公開發布/);
 assert.match(approvalConsole, /post\("\/threads-growth\/config", \{action:"save", config:\{livePublishEnabled:true\}\}, true\)/);
 
+
+// Manual draft creation became side-effect capable in auto mode, so the mobile console must attach the approval PIN.
+assert.match(approvalConsole, /post\("\/threads-growth\/draft", \{topic:topic, context:context\}, true\)/);
+assert.doesNotMatch(approvalConsole, /post\("\/threads-growth\/draft", \{topic:topic, context:context\}, false\)/);
