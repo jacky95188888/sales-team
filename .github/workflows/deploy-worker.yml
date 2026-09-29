@@ -75,13 +75,26 @@ jobs:
 
           # Production safety smoke test: protected Threads routes must reject
           # requests that do not carry the human approval PIN.
-          for route in config research drafts approve publish; do
-            status=$(curl --silent --show-error --output "gate-$route.json" --write-out '%{http_code}' \
-              --request POST \
-              --header 'Origin: https://jacky95188888.github.io' \
-              --header 'Content-Type: application/json' \
-              --data '{}' \
-              "$base/threads-growth/$route")
-            test "$status" = "401"
-            jq -e '.error == "APPROVAL_UNAUTHORIZED"' "gate-$route.json" >/dev/null
+          # A newly deployed Worker can take a few seconds to become visible at every edge.
+          # Retry the whole approval-gate probe before declaring production verification failed.
+          verified=0
+          for attempt in 1 2 3 4 5 6; do
+            ok=1
+            for route in config research drafts approve publish; do
+              status=$(curl --silent --show-error --output "gate-$route.json" --write-out '%{http_code}' \
+                --request POST \
+                --header 'Origin: https://jacky95188888.github.io' \
+                --header 'Content-Type: application/json' \
+                --data '{}' \
+                "$base/threads-growth/$route")
+              if [ "$status" != "401" ] || ! jq -e '.error == "APPROVAL_UNAUTHORIZED"' "gate-$route.json" >/dev/null; then
+                ok=0
+                echo "attempt=$attempt route=$route status=$status"
+                cat "gate-$route.json"
+                break
+              fi
+            done
+            if [ "$ok" = "1" ]; then verified=1; break; fi
+            sleep 5
           done
+          test "$verified" = "1"
