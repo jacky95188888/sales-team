@@ -172,6 +172,7 @@ async function threadsGrowth(env, path, b) {
     const autoExecutionHistory = JSON.parse((await env.MONITOR.get("threads:growth:auto-execution:history")) || "[]");
     const today = taiwanDay();
     const publishHistory = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    const learned = JSON.parse((await env.MONITOR.get("threads:growth:learned")) || "null");
     const draftPage = await env.MONITOR.list({ prefix: "threads:growth:draft:", limit: 50 });
     let pendingToday = 0;
     for (const item of draftPage.keys || []) {
@@ -185,6 +186,15 @@ async function threadsGrowth(env, path, b) {
       latestResearchError,
       latestAutoExecution,
       autoExecutionHistory: autoExecutionHistory.slice(0, 10),
+      learningSummary: learned ? {
+        sampleSize: Number(learned.sampleSize || 0),
+        note: String(learned.note || "").slice(0, 300),
+        topPatterns: Array.isArray(learned.patterns) ? learned.patterns.slice(0, 3).map((x) => ({
+          key: String(x.key || "").slice(0, 180),
+          count: Number(x.count || 0),
+          avgScore: Number(x.avgScore || 0)
+        })) : []
+      } : null,
       todaySummary: {
         date: today,
         researched: latestResearch?.date === today,
@@ -303,8 +313,11 @@ async function threadsGrowth(env, path, b) {
       history[index] = next;
       merged++;
     }
-    await env.MONITOR.put("threads:growth:history", JSON.stringify(history.slice(-200)));
-    return { stage: "metrics", received: incoming.length, merged, ignored: incoming.length - merged };
+    const keptHistory = history.slice(-200);
+    await env.MONITOR.put("threads:growth:history", JSON.stringify(keptHistory));
+    const learned = learnFromThreadsMetrics(keptHistory);
+    await env.MONITOR.put("threads:growth:learned", JSON.stringify(learned));
+    return { stage: "metrics", received: incoming.length, merged, ignored: incoming.length - merged, learned };
   }
   if (path === "/threads-growth/learn") {
     const rows = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");

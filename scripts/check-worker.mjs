@@ -249,3 +249,9 @@ assert.match(approvalConsole, /post\("\/threads-growth\/test-publish", \{draftId
 assert.match(worker, /const metricFields = \["views", "likes", "replies", "reposts", "measuredAt"\]/);
 assert.match(worker, /if \(index < 0\) continue/);
 assert.doesNotMatch(worker, /put\("threads:growth:history", JSON\.stringify\(rows\)\)/);
+
+// Performance feedback should immediately refresh learning weights and expose only a compact owner summary.
+assert.match(worker, /const learned = learnFromThreadsMetrics\(keptHistory\)/);
+assert.match(worker, /learningSummary: learned \? \{/);
+assert.match(approvalConsole, /顧問團學到什麼/);
+assert.match(approvalConsole, /目前樣本還不足，先繼續探索/);
