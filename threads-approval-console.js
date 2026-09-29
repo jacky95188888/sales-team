@@ -70,6 +70,8 @@
         (d.approvalConfigured ? '✅ PIN 安全閘門已設定' : '❌ PIN 安全閘門未設定') + '<br>' +
         (d.oauthConnected ? '✅ Threads 官方授權已連線' : '⚠️ Threads 尚未完成官方授權') + '<br>' +
         (d.livePublishEnabled ? '🟢 正式發布已開啟' : '🟡 正式發布預設關閉') + '<br>' +
+        (d.autonomousResearchEnabled ? '🤖 每日上午自動找題研究，不必先下主題' : '⚠️ 自動研究未開啟') + '<br>' +
+        (d.latestResearch ? '📝 最近研究：' + esc(d.latestResearch.date) + '，候選 ' + Number(d.latestResearch.candidateCount||0) + ' 題／待審草稿 ' + Number(d.latestResearch.draftCount||0) + ' 份<br>' : '') +
         '✅ 安全測試可用</div>';
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }

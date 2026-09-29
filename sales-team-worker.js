@@ -84,8 +84,11 @@ async function threadsGrowth(env, path, b) {
   if (path === "/threads-growth/status") {
     const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
     const auth = JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null");
+    const latestResearch = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
     return {
       stage: "status",
+      autonomousResearchEnabled: true,
+      latestResearch: latestResearch ? { date: latestResearch.date, status: latestResearch.status, candidateCount: (latestResearch.candidates || []).length, draftCount: (latestResearch.draftIds || []).length, updatedAt: latestResearch.updatedAt || latestResearch.createdAt } : null,
       approvalConfigured: /^[a-f0-9]{64}$/.test(String(env.APPROVAL_KEY_SHA256 || "").toLowerCase()),
       oauthConnected: !!(auth?.accessToken && auth?.userId) || !!(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID),
       livePublishEnabled: !!config.livePublishEnabled,
@@ -2116,6 +2119,73 @@ async function hqScheduled(env, event) {
     }
   }
 }
+async function threadsAutonomousResearch(env, event) {
+  // The owner does not need to submit a topic first. Once a day (09:00 Taiwan),
+  // discover current discussion opportunities with web search and prepare review-only drafts.
+  // This function never approves or publishes anything.
+  if (!env.MONITOR || event?.cron !== "0 1 * * *") return;
+  const today = taiwanDay();
+  const marker = "threads:growth:auto-research:" + today;
+  if (await env.MONITOR.get(marker)) return;
+  try {
+    const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}"));
+    if (!config.enabled) return;
+    const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+    const learned = JSON.parse((await env.MONITOR.get("threads:growth:learned")) || "{}");
+    const research = await discoverThreadsTopics(env, { config, history });
+    const candidates = (Array.isArray(research.candidates) ? research.candidates : [])
+      .filter((x) => x && String(x.topic || "").trim())
+      .slice(0, 6);
+    const report = {
+      id: "research_" + today.replace(/-/g, ""),
+      date: today,
+      status: "researched_waiting_review",
+      candidates,
+      createdAt: Date.now()
+    };
+    await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
+    await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
+
+    const count = Math.min(config.postsPerDay, candidates.length);
+    const drafts = [];
+    for (let i = 0; i < count; i++) {
+      const c = candidates[i];
+      const context = [
+        c.angle ? "切角：" + c.angle : "",
+        c.whyNow ? "為什麼現在：" + c.whyNow : "",
+        c.sourceHint ? "研究來源提示：" + c.sourceHint : "",
+        c.risk ? "風險提醒：" + c.risk : ""
+      ].filter(Boolean).join("\n");
+      const draft = await draftThreadsPost(env, { topic: c.topic, context, history, learned });
+      const id = "th_auto_" + today.replace(/-/g, "") + "_" + (i + 1) + "_" + crypto.randomUUID().slice(0, 6);
+      const record = {
+        id,
+        status: "pending_review",
+        source: "autonomous_daily_research",
+        researchId: report.id,
+        topic: String(c.topic).slice(0, 300),
+        research: c,
+        ...draft,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      await env.MONITOR.put("threads:growth:draft:" + id, JSON.stringify(record), { expirationTtl: 2592000 });
+      drafts.push(id);
+    }
+    report.draftIds = drafts;
+    report.updatedAt = Date.now();
+    await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
+    await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
+    await env.MONITOR.put(marker, "done", { expirationTtl: 172800 });
+  } catch (error) {
+    await env.MONITOR.put(
+      "threads:growth:auto-research-error",
+      JSON.stringify({ at: Date.now(), error: String(error?.message || error).slice(0, 500) }),
+      { expirationTtl: 604800 }
+    );
+  }
+}
+
 async function hqProcessAutoPublish(env) {
   if (!env.MONITOR) return;
   const workspaceIds = JSON.parse((await env.MONITOR.get("hq:workspaces")) || "[]").slice(-20);
@@ -2165,6 +2235,7 @@ export default {
       await Promise.all([
         e?.cron === "0 1 * * *" ? monitorScheduled(env) : Promise.resolve(),
         hqScheduled(env, e),
+        threadsAutonomousResearch(env, e),
       ]);
       await hqProcessAutoPublish(env);
     })());

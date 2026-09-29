@@ -50,6 +50,7 @@ assert.equal(threadsStatus.approvalConfigured, true);
 assert.equal(threadsStatus.oauthConnected, false);
 assert.equal(threadsStatus.livePublishEnabled, false);
 assert.equal(threadsStatus.safeDryRunAvailable, true);
+assert.equal(threadsStatus.autonomousResearchEnabled, true);
 const configUnauthorized = await request("/threads-growth/config", { action: "save", config: { livePublishEnabled: true } });
 assert.equal(configUnauthorized.response.status, 401);
 assert.equal(configUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
