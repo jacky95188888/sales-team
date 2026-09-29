@@ -88,7 +88,24 @@ export default {
       if (url.pathname === "/growth-profile") return json(body.profile ? await putGrowthProfile(env, body.workspaceId, body.profile) : await getGrowthProfile(env, body.workspaceId), 200, H);
       if (url.pathname === "/growth-run") return json(await runGrowthResearch(env, body, (prompt, options) => ai(env, prompt, options)), 200, H);
       if (url.pathname === "/growth-run-get") return json(await getGrowthRun(env, body.workspaceId, body.runId), 200, H);
-      if (url.pathname === "/growth-review") return json(await reviewGrowthDraft(env, body), 200, H);
+      if (url.pathname === "/growth-review") {
+        const reviewed = await reviewGrowthDraft(env, body);
+        if (reviewed.status === "approved") {
+          const run = await getGrowthRun(env, body.workspaceId, body.runId);
+          const topic = (run.topics || []).find(x => x.id === body.draftId);
+          if (topic?.draft?.text) {
+            const proposal = await createApprovalRequest(env, {
+              workspaceId: body.workspaceId,
+              action: "threads.publish-post",
+              summary: `Threads 發布提案：${topic.title || "已批准草稿"}`,
+              diff: topic.draft.text,
+              payload: { text: topic.draft.text, topic: topic.title || "", hookType: topic.draft.hookType || "", format: "text" },
+            });
+            return json({ ...reviewed, proposalId: proposal.id, executionStatus: proposal.status }, 200, H);
+          }
+        }
+        return json(reviewed, 200, H);
+      }
       if (url.pathname === "/growth-result") return json(await recordGrowthPerformance(env, body), 200, H);
       if (url.pathname === "/threads-config") return json(await threadsConnection(env, body.workspaceId), 200, H);
       if (url.pathname === "/threads-cultivation-config") return json(await saveCultivationConfig(env, body), 200, H);
