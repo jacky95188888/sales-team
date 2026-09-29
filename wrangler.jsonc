@@ -9,13 +9,19 @@
     }
   ],
   "triggers": {
-    "crons": ["0 1 * * *", "0 6 * * *", "0 13 * * *"]
+    "crons": [
+      "0 1 * * *",
+      "0 6 * * *",
+      "0 13 * * *"
+    ]
   },
   "observability": {
     "enabled": true
   },
   "secrets": {
-    "required": ["ANTHROPIC_KEY"],
+    "required": [
+      "ANTHROPIC_KEY"
+    ],
     "optional": [
       "HEYGEN_API_KEY",
       "PUBLISH_TOKEN_KEY",
@@ -24,7 +30,8 @@
       "TIKTOK_CLIENT_KEY",
       "TIKTOK_CLIENT_SECRET",
       "THREADS_APP_ID",
-      "THREADS_APP_SECRET"
+      "THREADS_APP_SECRET",
+      "APPROVAL_KEY"
     ]
   }
 }
