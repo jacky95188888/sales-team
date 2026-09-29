@@ -101,6 +101,10 @@
             (x.angle ? '<br>切角：'+esc(x.angle) : '') +
             (x.whyNow ? '<br>現在值得談：'+esc(x.whyNow) : '') +
             (x.sourceHint ? '<br>來源提示：'+esc(x.sourceHint) : '') +
+            (x.decision ? '<br><b>顧問團結論：'+esc(x.decision)+'</b>' : '') +
+            (x.discussion && x.discussion.researcher ? '<br>🔬 研究員：'+esc(x.discussion.researcher) : '') +
+            (x.discussion && x.discussion.strategist ? '<br>🧭 內容策略：'+esc(x.discussion.strategist) : '') +
+            (x.discussion && x.discussion.riskReviewer ? '<br>🛡️ 風險檢查：'+esc(x.discussion.riskReviewer) : '') +
             (x.risk ? '<br>風險：'+esc(x.risk) : '') + '</div>';
         }).join("") + '</section>';
     } catch(e) {
