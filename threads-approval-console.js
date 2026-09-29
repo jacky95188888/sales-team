@@ -65,6 +65,7 @@
     try {
       var d = await post("/threads-growth/status", {}, true);
       var box = el("threadsGateReady");
+      var next = nextOwnerAction(d);
       if (box) box.innerHTML =
         (d.todaySummary ? '<div class="out"><b>📊 今日顧問團摘要｜'+esc(d.todaySummary.date||"")+'</b><br>' +
           (d.todaySummary.researched ? '✅ 已完成今日研究' : '⏳ 今日尚未研究') + '｜候選 '+Number(d.todaySummary.candidateCount||0)+' 題｜草稿 '+Number(d.todaySummary.draftCount||0)+' 份<br>' +
@@ -89,8 +90,49 @@
                 esc(when) + '｜' + esc(x.status||"") + (x.topic ? '<br>'+esc(x.topic) : '') +
                 (x.error ? '<br><span class="err">'+esc(x.error)+'</span>' : '') + '</div>';
             }).join("") + '</details>'
-          : '');
+          : '') +
+        '<div class="out" style="margin-top:8px"><b>👉 老闆下一步</b><br>'+esc(next.text)+
+          (next.label ? '<br><button class="btn" id="threadsGateNextAction" type="button" style="margin-top:8px">'+esc(next.label)+'</button>' : '')+
+        '</div>';
+      var nextBtn=el("threadsGateNextAction");
+      if(nextBtn) nextBtn.onclick=function(){ runNextOwnerAction(next.kind); };
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+  }
+  function nextOwnerAction(d) {
+    var t=d.todaySummary || {};
+    if (!t.researched) return {kind:"research", text:"今天還沒研究，先讓顧問團找題。", label:"🔎 立即研究"};
+    if (d.mode === "review" && Number(t.pendingReviewCount||0) > 0)
+      return {kind:"review", text:"有 "+Number(t.pendingReviewCount||0)+" 份草稿等你拍板。", label:"🛡️ 去審核"};
+    if (d.mode === "auto" && !d.oauthConnected)
+      return {kind:"oauth", text:"全自動流程已準備，但 Threads 官方授權尚未完成。", label:"🔗 完成 Threads 授權"};
+    if (d.mode === "auto" && !d.livePublishEnabled)
+      return {kind:"live", text:"全自動模式目前被正式發布開關擋住。", label:"🟢 開啟正式發布"};
+    return {kind:"ok", text:d.mode === "auto" ? "全自動流程目前就緒，等待下一次研究／執行。" : "目前沒有待審工作。", label:""};
+  }
+  async function connectThreadsOAuth() {
+    try {
+      status("正在開啟 Threads 官方授權…");
+      var d=await post("/threads-growth/oauth-start", {}, false);
+      if (!d.authorizationUrl) throw new Error("THREADS_OAUTH_URL_MISSING");
+      window.location.href=d.authorizationUrl;
+    } catch(e) { status(e.message, true); }
+  }
+  async function enableLivePublish() {
+    if (!confirm("確定開啟正式發布？全自動模式下，通過研究與安全檢查的內容之後可直接公開發布。")) return;
+    try {
+      await post("/threads-growth/config", {action:"save", config:{livePublishEnabled:true}}, true);
+      await refresh();
+      status("正式發布已開啟。");
+    } catch(e) { status(e.message, true); }
+  }
+  function runNextOwnerAction(kind) {
+    if (kind === "research") return researchNow();
+    if (kind === "review") {
+      var box=el("threadsGateDrafts"); if(box) box.scrollIntoView({behavior:"smooth", block:"start"});
+      return;
+    }
+    if (kind === "oauth") return connectThreadsOAuth();
+    if (kind === "live") return enableLivePublish();
   }
   async function setMode(mode) {
     var auto = mode === "auto";
