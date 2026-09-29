@@ -175,7 +175,7 @@ assert.match(worker, /threads:growth:research:latest/);
 assert.match(worker, /event\?\.cron !== "0 1 \* \* \*"/);
 assert.match(approvalConsole, /不必先下主題/);
 
-assert.match(approvalConsole, /今日自動研究報告/);
+assert.match(approvalConsole, /最近自動研究報告/);
 assert.ok(approvalConsole.includes("/threads-growth/research"));
 
 assert.match(approvalConsole, /立即研究今天題目/);
@@ -188,3 +188,9 @@ assert.match(approvalConsole, /顧問團結論/);
 assert.match(approvalConsole, /研究員/);
 assert.match(approvalConsole, /內容策略/);
 assert.match(approvalConsole, /風險檢查/);
+
+assert.match(worker, /Math\.min\(3, writable\.length\)/);
+assert.match(worker, /NO_RESEARCH_CANDIDATES/);
+assert.match(worker, /latestResearchError/);
+assert.match(approvalConsole, /最近研究失敗/);
+assert.match(approvalConsole, /already_completed/);
