@@ -14,5 +14,6 @@
   }
   async function refresh(){ try{render(await post("/agent-proposal-list")); $("#agentApprovalStatus").textContent="";}catch(e){$("#agentApprovalStatus").textContent=e.message;} }
   function mount(){ if($("#agentApprovalConsole"))return; const host=document.querySelector(".wrap")||document.body, s=document.createElement("section"); s.id="agentApprovalConsole";s.className="panel";s.innerHTML='<div style="font-size:1.05rem;font-weight:900;color:var(--gold-lt,#f5dea0)">🛡️ AI 執行閘門</div><div class="small">AI 可以研究與提出方案；真正對外發布前必須由你批准。</div><div style="margin-top:10px"><button class="btn btn2" id="agentApprovalRefresh">重新整理提案</button></div><div class="status" id="agentApprovalStatus"></div><div id="agentApprovalList" style="margin-top:10px"></div>';host.appendChild(s);$("#agentApprovalRefresh").onclick=refresh;refresh(); }
+  window.addEventListener("agent-proposal-created",()=>refresh());
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",mount);else mount();
 })();
