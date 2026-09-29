@@ -209,3 +209,7 @@ assert.match(worker, /threads:growth:auto-execution:latest/);
 assert.match(worker, /approved_waiting_live_enable/);
 assert.match(worker, /publish_failed/);
 assert.match(approvalConsole, /最近自動執行/);
+
+assert.match(worker, /threads:growth:auto-execution:history/);
+assert.match(worker, /autoExecutionHistory: autoExecutionHistory\.slice\(0, 10\)/);
+assert.match(approvalConsole, /最近自動工作紀錄/);
