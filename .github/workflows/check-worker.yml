@@ -12,6 +12,7 @@ on:
       - scripts/check-worker.mjs
       - scripts/test-hq-worker.mjs
       - .github/workflows/check-worker.yml
+      - .github/workflows/deploy-worker.yml
   push:
     branches:
       - main
