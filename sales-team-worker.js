@@ -209,12 +209,19 @@ function cors(req) {
     Vary: "Origin",
   };
 }
-function requireThreadsApproval(req, env) {
-  const expected = String(env.APPROVAL_KEY || "");
-  if (!expected)
+async function requireThreadsApproval(req, env) {
+  const expectedHash = String(env.APPROVAL_KEY_SHA256 || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(expectedHash))
     throw Object.assign(new Error("APPROVAL_KEY_NOT_CONFIGURED"), { status: 503 });
   const actual = String(req.headers.get("X-Approval-Key") || "");
-  if (!actual || actual !== expected)
+  if (!actual)
+    throw Object.assign(new Error("APPROVAL_UNAUTHORIZED"), { status: 401 });
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(actual));
+  const actualHash = [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, "0")).join("");
+  let diff = actualHash.length ^ expectedHash.length;
+  for (let i = 0; i < Math.min(actualHash.length, expectedHash.length); i++)
+    diff |= actualHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+  if (diff !== 0)
     throw Object.assign(new Error("APPROVAL_UNAUTHORIZED"), { status: 401 });
 }
 function profile(p) {
@@ -2192,7 +2199,7 @@ export default {
         return json(await threadsOAuthStart(req, env), 200, H);
       if (url.pathname.startsWith("/threads-growth/")) {
         if (["/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/publish"].includes(url.pathname))
-          requireThreadsApproval(req, env);
+          await requireThreadsApproval(req, env);
         return json(await threadsGrowth(env, url.pathname, b), 200, H);
       }
       if (url.pathname === "/monitor-config")
