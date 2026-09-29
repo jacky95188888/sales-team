@@ -22,6 +22,7 @@ const ROUTES = new Set([
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
+  "/threads-growth/research",
   "/threads-growth/drafts",
   "/threads-growth/approve",
   "/threads-growth/test-publish",
@@ -105,6 +106,10 @@ async function threadsGrowth(env, path, b) {
   if (path === "/threads-growth/discover") {
     const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
     return { stage: "discover", ...(await discoverThreadsTopics(env, { ...b, config, history })) };
+  }
+  if (path === "/threads-growth/research") {
+    const latest = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
+    return { stage: "research", report: latest };
   }
   if (path === "/threads-growth/draft") {
     const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
@@ -2281,7 +2286,7 @@ export default {
       if (url.pathname === "/threads-growth/oauth-start")
         return json(await threadsOAuthStart(req, env), 200, H);
       if (url.pathname.startsWith("/threads-growth/")) {
-        if (["/threads-growth/config", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/publish"].includes(url.pathname))
+        if (["/threads-growth/config", "/threads-growth/research", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/publish"].includes(url.pathname))
           await requireThreadsApproval(req, env);
         return json(await threadsGrowth(env, url.pathname, b), 200, H);
       }

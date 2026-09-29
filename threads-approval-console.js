@@ -75,8 +75,33 @@
         '✅ 安全測試可用</div>';
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }
+  async function researchReport() {
+    try {
+      var d = await post("/threads-growth/research", {}, true);
+      var box = el("threadsGateResearch");
+      if (!box) return;
+      var report = d.report;
+      if (!report || !Array.isArray(report.candidates) || !report.candidates.length) {
+        box.innerHTML = '<div class="hint">今日自動研究尚未產生；排程會在上午自動執行。</div>';
+        return;
+      }
+      box.innerHTML = '<section class="panel" style="margin:10px 0"><b style="color:var(--gold-lt)">🔎 今日自動研究報告｜' + esc(report.date||"") + '</b>' +
+        '<div class="hint">顧問團自己找出的討論候選。你不用先下主題。</div>' +
+        report.candidates.map(function(x,i){
+          return '<div class="out" style="margin-top:8px"><b>'+(i+1)+'. '+esc(x.topic||"")+'</b>' +
+            (x.angle ? '<br>切角：'+esc(x.angle) : '') +
+            (x.whyNow ? '<br>現在值得談：'+esc(x.whyNow) : '') +
+            (x.sourceHint ? '<br>來源提示：'+esc(x.sourceHint) : '') +
+            (x.risk ? '<br>風險：'+esc(x.risk) : '') + '</div>';
+        }).join("") + '</section>';
+    } catch(e) {
+      var box=el("threadsGateResearch");
+      if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>';
+    }
+  }
   async function refresh() {
     readiness();
+    researchReport();
     try {
       status("正在讀取待審核草稿…");
       var d = await post("/threads-growth/drafts", {}, true);
@@ -135,7 +160,7 @@
       '<div class="hint">AI 可以研究與寫草稿，但不能自己公開發文。只有你輸入執行 PIN、查看內容並按「正式發布」才會送出。</div></div>'+
       '<section class="panel"><b>建立待審核草稿</b><input id="threadsGateTopic" placeholder="例如：一人公司如何用 AI 減少重複工作" style="margin-top:8px"><textarea id="threadsGateContext" placeholder="補充資料（可留白）" style="margin-top:8px;min-height:90px"></textarea><button class="btn" id="threadsGateDraft" type="button">產生草稿（不發布）</button></section>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn2" id="threadsGateRefresh" type="button">更新審核清單</button><button class="copy" id="threadsGateChangePin" type="button">重新輸入 PIN</button></div>'+
-      '<div id="threadsGateReady"></div><div id="threadsGateStatus"></div><div id="threadsGateDrafts"></div>';
+      '<div id="threadsGateReady"></div><div id="threadsGateResearch"></div><div id="threadsGateStatus"></div><div id="threadsGateDrafts"></div>';
     wrap.appendChild(page);
     var nav=el("navbar"); if(nav){ var n=document.createElement("button"); n.setAttribute("data-p","threads_gate"); n.innerHTML='<span class="ic">🛡️</span>脆審核'; nav.appendChild(n); }
     el("threadsGateDraft").onclick=createDraft;

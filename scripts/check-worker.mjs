@@ -27,6 +27,7 @@ const requiredRoutes = [
   "/threads-growth/config",
   "/threads-growth/discover",
   "/threads-growth/draft",
+  "/threads-growth/research",
   "/threads-growth/drafts",
   "/threads-growth/approve",
   "/threads-growth/test-publish",
@@ -111,7 +112,7 @@ assert.match(worker, /threads_content_publish/);
 assert.match(worker, /X-Approval-Key/);
 assert.match(worker, /APPROVAL_KEY_NOT_CONFIGURED/);
 assert.match(worker, /APPROVAL_UNAUTHORIZED/);
-assert.ok(worker.includes('["/threads-growth/config", "/threads-growth/drafts"'));
+assert.ok(worker.includes('["/threads-growth/config", "/threads-growth/research", "/threads-growth/drafts"'));
 assert.equal(config.vars.APPROVAL_KEY_SHA256.length, 64);
 assert.match(config.vars.APPROVAL_KEY_SHA256, /^[a-f0-9]{64}$/);
 assert.doesNotMatch(deployWorker, /secrets\.APPROVAL_KEY/);
@@ -159,7 +160,7 @@ for (const pattern of forbiddenPatterns) {
 
 console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
 
-assert.match(deployWorker, /for route in config drafts approve publish/);
+assert.match(deployWorker, /for route in config research drafts approve publish/);
 assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
 assert.match(deployWorker, /test "\$status" = "401"/);
 
@@ -169,3 +170,6 @@ assert.match(worker, /autonomous_daily_research/);
 assert.match(worker, /threads:growth:research:latest/);
 assert.match(worker, /event\?\.cron !== "0 1 \* \* \*"/);
 assert.match(approvalConsole, /不必先下主題/);
+
+assert.match(approvalConsole, /今日自動研究報告/);
+assert.ok(approvalConsole.includes("/threads-growth/research"));

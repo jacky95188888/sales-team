@@ -75,7 +75,7 @@ jobs:
 
           # Production safety smoke test: protected Threads routes must reject
           # requests that do not carry the human approval PIN.
-          for route in config drafts approve publish; do
+          for route in config research drafts approve publish; do
             status=$(curl --silent --show-error --output "gate-$route.json" --write-out '%{http_code}' \
               --request POST \
               --header 'Origin: https://jacky95188888.github.io' \
