@@ -179,3 +179,11 @@ assert.ok(approvalConsole.includes("/threads-growth/research"));
 
 assert.match(approvalConsole, /立即研究今天題目/);
 assert.ok(approvalConsole.includes("/threads-growth/research-now"));
+
+assert.match(threadsGrowth, /研究員檢查證據與來源/);
+assert.match(threadsGrowth, /風險顧問/);
+assert.match(worker, /const writable = candidates\.filter/);
+assert.match(approvalConsole, /顧問團結論/);
+assert.match(approvalConsole, /研究員/);
+assert.match(approvalConsole, /內容策略/);
+assert.match(approvalConsole, /風險檢查/);
