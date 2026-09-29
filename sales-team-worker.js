@@ -163,8 +163,10 @@ async function threadsGrowth(env, path, b) {
     };
   }
   if (path === "/threads-growth/config") {
-    if ((b.action || "get") === "get") return { config: normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}")) };
-    const config = normalizeThreadsConfig(b.config || b);
+    const current = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
+    if ((b.action || "get") === "get") return { config: current };
+    const patch = b.config && typeof b.config === "object" ? b.config : b;
+    const config = normalizeThreadsConfig({ ...current, ...patch });
     await env.MONITOR.put(cfgKey, JSON.stringify(config));
     return { ok: true, config };
   }
