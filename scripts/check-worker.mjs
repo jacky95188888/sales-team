@@ -157,3 +157,7 @@ for (const pattern of forbiddenPatterns) {
 }
 
 console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
+
+assert.match(deployWorker, /for route in config drafts approve publish/);
+assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
+assert.match(deployWorker, /test "\$status" = "401"/);
