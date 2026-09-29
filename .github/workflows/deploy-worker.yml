@@ -80,7 +80,7 @@ jobs:
           verified=0
           for attempt in 1 2 3 4 5 6; do
             ok=1
-            for route in config research drafts approve publish; do
+            for route in config research research-now drafts approve publish; do
               status=$(curl --silent --show-error --output "gate-$route.json" --write-out '%{http_code}' \
                 --request POST \
                 --header 'Origin: https://jacky95188888.github.io' \
