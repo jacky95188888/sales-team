@@ -44,12 +44,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          APPROVAL_KEY: ${{ secrets.APPROVAL_KEY }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$YOUTUBE_CLIENT_ID"
           test -n "$YOUTUBE_CLIENT_SECRET"
+          test -n "$APPROVAL_KEY"
 
-      - name: Deploy Worker and sync YouTube publisher Secrets
+      - name: Deploy Worker and sync protected Secrets
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -59,9 +61,11 @@ jobs:
           secrets: |
             YOUTUBE_CLIENT_ID
             YOUTUBE_CLIENT_SECRET
+            APPROVAL_KEY
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          APPROVAL_KEY: ${{ secrets.APPROVAL_KEY }}
 
       - name: Verify public Worker endpoint
         run: |
