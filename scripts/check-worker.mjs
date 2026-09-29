@@ -162,3 +162,10 @@ console.log(`Worker safety checks passed (${requiredRoutes.length} routes).`);
 assert.match(deployWorker, /for route in config drafts approve publish/);
 assert.match(deployWorker, /APPROVAL_UNAUTHORIZED/);
 assert.match(deployWorker, /test "\$status" = "401"/);
+
+// Autonomous Threads research must remain review-only and scheduled once per Taiwan morning.
+assert.match(worker, /threadsAutonomousResearch/);
+assert.match(worker, /autonomous_daily_research/);
+assert.match(worker, /threads:growth:research:latest/);
+assert.match(worker, /event\?\.cron !== "0 1 \* \* \*"/);
+assert.match(approvalConsole, /不必先下主題/);
