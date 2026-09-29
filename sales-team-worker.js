@@ -2146,6 +2146,7 @@ async function threadsAutonomousResearch(env, event) {
     const research = await discoverThreadsTopics(env, { config, history });
     const candidates = (Array.isArray(research.candidates) ? research.candidates : [])
       .filter((x) => x && String(x.topic || "").trim())
+      .sort((a, b) => Number(a.priority || 99) - Number(b.priority || 99))
       .slice(0, 6);
     const report = {
       id: "research_" + today.replace(/-/g, ""),
@@ -2157,15 +2158,19 @@ async function threadsAutonomousResearch(env, event) {
     await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
     await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
 
-    const count = Math.min(config.postsPerDay, candidates.length);
+    const writable = candidates.filter((x) => String(x.decision || "值得寫") === "值得寫");
+    const count = Math.min(config.postsPerDay, writable.length);
     const drafts = [];
     for (let i = 0; i < count; i++) {
-      const c = candidates[i];
+      const c = writable[i];
       const context = [
         c.angle ? "切角：" + c.angle : "",
         c.whyNow ? "為什麼現在：" + c.whyNow : "",
         c.sourceHint ? "研究來源提示：" + c.sourceHint : "",
-        c.risk ? "風險提醒：" + c.risk : ""
+        c.risk ? "風險提醒：" + c.risk : "",
+        c.discussion?.researcher ? "研究員：" + c.discussion.researcher : "",
+        c.discussion?.strategist ? "內容策略顧問：" + c.discussion.strategist : "",
+        c.discussion?.riskReviewer ? "風險顧問：" + c.discussion.riskReviewer : ""
       ].filter(Boolean).join("\n");
       const draft = await draftThreadsPost(env, { topic: c.topic, context, history, learned });
       const id = "th_auto_" + today.replace(/-/g, "") + "_" + (i + 1) + "_" + crypto.randomUUID().slice(0, 6);
