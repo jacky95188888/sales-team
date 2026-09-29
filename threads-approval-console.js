@@ -75,6 +75,15 @@
         '✅ 安全測試可用</div>';
     } catch(e) { var box=el("threadsGateReady"); if(box) box.innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
   }
+  async function researchNow() {
+    if (!confirm("現在立即讓顧問團研究今天值得討論的題目？只會研究與產生待審草稿，不會發布。")) return;
+    try {
+      status("顧問團正在上網研究今天的題目，完成後會放進待審核。");
+      await post("/threads-growth/research-now", {}, true);
+      await refresh();
+      status("今日自動研究完成，請查看研究報告與待審草稿。");
+    } catch(e) { status(e.message, true); }
+  }
   async function researchReport() {
     try {
       var d = await post("/threads-growth/research", {}, true);
@@ -159,11 +168,12 @@
       '<div style="font-size:1.2rem;font-weight:900;color:var(--gold-lt)">🛡️ Threads AI 執行閘門</div>'+
       '<div class="hint">AI 可以研究與寫草稿，但不能自己公開發文。只有你輸入執行 PIN、查看內容並按「正式發布」才會送出。</div></div>'+
       '<section class="panel"><b>建立待審核草稿</b><input id="threadsGateTopic" placeholder="例如：一人公司如何用 AI 減少重複工作" style="margin-top:8px"><textarea id="threadsGateContext" placeholder="補充資料（可留白）" style="margin-top:8px;min-height:90px"></textarea><button class="btn" id="threadsGateDraft" type="button">產生草稿（不發布）</button></section>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn2" id="threadsGateRefresh" type="button">更新審核清單</button><button class="copy" id="threadsGateChangePin" type="button">重新輸入 PIN</button></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="threadsGateResearchNow" type="button">🔎 立即研究今天題目</button><button class="btn btn2" id="threadsGateRefresh" type="button">更新審核清單</button><button class="copy" id="threadsGateChangePin" type="button">重新輸入 PIN</button></div>'+
       '<div id="threadsGateReady"></div><div id="threadsGateResearch"></div><div id="threadsGateStatus"></div><div id="threadsGateDrafts"></div>';
     wrap.appendChild(page);
     var nav=el("navbar"); if(nav){ var n=document.createElement("button"); n.setAttribute("data-p","threads_gate"); n.innerHTML='<span class="ic">🛡️</span>脆審核'; nav.appendChild(n); }
     el("threadsGateDraft").onclick=createDraft;
+    el("threadsGateResearchNow").onclick=researchNow;
     el("threadsGateRefresh").onclick=refresh;
     el("threadsGateChangePin").onclick=function(){ sessionStorage.removeItem(KEY); approvalKey(true); refresh(); };
   }
