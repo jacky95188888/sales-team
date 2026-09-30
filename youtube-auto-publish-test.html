@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YouTube 自動發布實測</title>
+<style>
+body{margin:0;background:#071020;color:#eef4ff;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif}
+main{max-width:680px;margin:0 auto;padding:28px 20px 60px}
+.card{background:#101c33;border:1px solid #29446d;border-radius:22px;padding:22px;box-shadow:0 18px 50px #0006}
+h1{font-size:26px;margin:0 0 10px}.muted{color:#9fb3d1;line-height:1.7}.status{margin-top:20px;padding:16px;border-radius:16px;background:#081426;white-space:pre-wrap;line-height:1.7}
+a{color:#7dc4ff;font-weight:800}.ok{color:#7ef0b2}.bad{color:#ff9f9f}
+</style>
+</head>
+<body><main><div class="card">
+<h1>▶ YouTube 自動發布實測</h1>
+<p class="muted">指定成品：天衡命理｜問答鉤子型短影音 A<br>這一頁不重新產片，只測「既有成品 → YouTube」。測試可見度固定為「不公開列出（unlisted）」。</p>
+<div id="s" class="status">正在讀取既有成品…</div>
+</div></main>
+<script>
+const WORKER_URL="https://sales-team.rhtm9y855y.workers.dev";
+const WORKSPACE_KEY="advisor_hq_workspace_v1";
+const TARGET=/天衡命理.*問答鉤子|問答鉤子型短影音/i;
+const s=document.getElementById("s");
+function show(t,cls){s.className="status "+(cls||"");s.innerHTML=t}
+async function api(path,payload){
+ const r=await fetch(WORKER_URL+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+ let d={}; try{d=await r.json()}catch(_){}
+ if(!r.ok||d.error) throw new Error(d.error||("HTTP "+r.status));
+ return d;
+}
+(async()=>{
+ try{
+  const workspaceId=localStorage.getItem(WORKSPACE_KEY)||"";
+  if(workspaceId.length<24) throw new Error("這台裝置尚未有美女顧問團同步碼。請先從顧問團首頁進入一次，再開這頁。");
+  show("1/4 讀取顧問團既有影片紀錄…");
+  const listed=await api("/hq-tasks",{action:"list",workspaceId});
+  const tasks=Array.isArray(listed.tasks)?listed.tasks:[];
+  const candidates=tasks.filter(t=>TARGET.test(JSON.stringify(t||{})));
+  const task=candidates.find(t=>{
+    const j=(t.videoJobs||{}).youtube||(t.videoJobs||{}).video;
+    return j&&j.status==="completed"&&j.videoUrl;
+  });
+  if(!task) throw new Error("找不到「天衡命理｜問答鉤子型短影音 A」已完成 MP4；已停止，沒有重做、沒有發布其他影片。");
+  const old=task.publishJobs&&task.publishJobs.youtube;
+  if(old&&old.status==="published"&&old.url){
+    show('✅ 這支影片先前已發布成功。<br><br><a href="'+old.url+'" target="_blank" rel="noopener">開啟 YouTube 成品</a>','ok'); return;
+  }
+  show("2/4 已鎖定正確影片；記錄本次成品批准…");
+  if(!task.finalApprovedAt){
+    task.finalApprovedAt=Date.now(); task.updatedAt=Date.now();
+    await api("/hq-tasks",{action:"upsert",workspaceId,task});
+  }
+  show("3/4 檢查 YouTube 授權…");
+  const cfg=await api("/publish-config",{workspaceId,refresh:true});
+  const yt=cfg.platforms&&cfg.platforms.youtube;
+  if(!yt||!yt.credentialsReady) throw new Error("YouTube OAuth 憑證目前未就緒。");
+  if(!yt.connected) throw new Error("YouTube 授權目前已中斷，需要重新連接後才能上傳。");
+  show("4/4 YouTube 已連接，正在自動上傳既有 MP4…");
+  const out=await api("/publish-video",{workspaceId,taskId:task.id,provider:"youtube",privacy:"unlisted"});
+  const job=out.job||{};
+  if(job.status!=="published"||!job.videoId) throw new Error("YouTube 沒有回傳完成的 Video ID。");
+  show('✅ 自動發布成功！<br>Video ID：'+job.videoId+'<br>可見度：不公開列出（unlisted）<br><br><a href="'+job.url+'" target="_blank" rel="noopener">開啟 YouTube 成品</a>','ok');
+ }catch(e){show("❌ 實測停止：\n"+String(e&&e.message||e),"bad")}
+})();
+</script></body></html>
