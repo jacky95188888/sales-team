@@ -989,6 +989,62 @@ async function videoUsage(env, b) {
     })),
   };
 }
+async function recoverExistingHeyGenVideo(env, b) {
+  await requireVideoAccess(env, b.workspaceId);
+  const wanted = String(b.title || "").trim();
+  if (!wanted) throw Object.assign(new Error("RECOVERY_TITLE_REQUIRED"), { status: 400 });
+  const sessions = await heygen(env, "/v3/video-agents?limit=50");
+  const norm = (v) => String(v || "").toLowerCase().replace(/[｜|]/g, " ").replace(/\s+/g, "");
+  const needle = norm(wanted);
+  const matches = (Array.isArray(sessions) ? sessions : []).filter((x) => {
+    const t = norm(x?.title);
+    return t === needle || t.includes(needle) || needle.includes(t);
+  });
+  if (matches.length !== 1)
+    throw Object.assign(new Error(matches.length ? "找到多支同名影片，為避免誤發已停止" : "HeyGen 最近50支影片中找不到指定成品"), { status: 409 });
+  const picked = matches[0];
+  const sessionId = String(picked?.session_id || "");
+  if (!sessionId) throw Object.assign(new Error("指定影片缺少 HeyGen session id"), { status: 409 });
+  const session = await heygen(env, "/v3/video-agents/" + encodeURIComponent(sessionId));
+  const videoId = String(session?.video_id || "");
+  if (!videoId) throw Object.assign(new Error("指定影片尚未取得 HeyGen video id"), { status: 409 });
+  const video = await heygen(env, "/v3/videos/" + encodeURIComponent(videoId));
+  const status = String(video?.status || session?.status || "").toLowerCase();
+  const videoUrl = String(video?.video_url || "");
+  if (status !== "completed" || !videoUrl)
+    throw Object.assign(new Error("指定影片目前不是已完成 MP4，為避免重做已停止"), { status: 409 });
+  const id = hqWorkspaceId(b.workspaceId), key = "hq:tasks:" + id;
+  const tasks = JSON.parse((await env.MONITOR.get(key)) || "[]");
+  const taskId = "recovered_" + videoId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70);
+  let task = tasks.find((x) => x && x.id === taskId);
+  if (!task) {
+    task = {
+      id: taskId,
+      goal: wanted,
+      outputs: { video: "既有 HeyGen 成品恢復紀錄；不重新產片。" },
+      channels: ["video"],
+      approvalMode: "review",
+      finalApprovedAt: Date.now(),
+      recoveredExistingVideo: true,
+      videoJobs: {
+        video: {
+          provider: "heygen", channel: "video", sessionId, videoId,
+          status: "completed", videoUrl,
+          captionedVideoUrl: video?.captioned_video_url || null,
+          thumbnailUrl: video?.thumbnail_url || null,
+          subtitleUrl: video?.subtitle_url || null,
+          duration: video?.duration ?? null,
+          recoveredAt: Date.now(), updatedAt: Date.now()
+        }
+      },
+      createdAt: Date.now(), updatedAt: Date.now()
+    };
+    tasks.unshift(task);
+    await env.MONITOR.put(key, JSON.stringify(tasks.slice(0, 80)));
+  }
+  return { ok: true, taskId: task.id, title: wanted, sessionId, videoId, status: "completed" };
+}
+
 async function requireVideoAccess(env, workspaceId) {
   if (!env.HEYGEN_API_KEY)
     throw Object.assign(
@@ -2493,6 +2549,8 @@ export default {
         return json(await videoConfig(env, b), 200, H);
       if (url.pathname === "/video-usage")
         return json(await videoUsage(env, b), 200, H);
+      if (url.pathname === "/recover-existing-video")
+        return json(await recoverExistingHeyGenVideo(env, b), 200, H);
       if (url.pathname === "/avatar-create")
         return json(await avatarCreate(env, b), 200, H);
       if (url.pathname === "/avatar-status")
