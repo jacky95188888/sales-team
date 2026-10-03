@@ -1,0 +1,4 @@
+2026-09-15
+V2 foundation committed on upgrade/video-quality-v2.
+main untouched.
+Ready to open draft PR and continue worker wiring.

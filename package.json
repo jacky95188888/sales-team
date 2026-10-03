@@ -1,0 +1,8 @@
+{
+  "name": "sales-team",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:video-quality-v2": "node scripts/test-video-quality-v2.mjs"
+  }
+}

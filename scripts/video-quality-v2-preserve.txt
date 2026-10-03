@@ -1,0 +1,1 @@
+PRESERVE: market research, advisor workflow, task storage, HeyGen access checks, avatar/voice assets, daily credit rate limit, YouTube/TikTok OAuth and publish implementation. V2 changes only the quality-controlled middle layer.

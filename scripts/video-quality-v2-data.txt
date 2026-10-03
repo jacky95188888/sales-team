@@ -1,0 +1,1 @@
+directorPlan and qualityReport belong to each task/video job. Do not make one global canned plan. A/B route, current topic, product/profile, channel and available assets are inputs per job.

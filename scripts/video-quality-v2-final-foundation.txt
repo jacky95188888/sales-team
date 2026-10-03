@@ -1,0 +1,1 @@
+V2 quality foundation is now committed. Proceed to draft PR, then worker integration and real mother-video validation.

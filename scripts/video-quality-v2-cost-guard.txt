@@ -1,0 +1,1 @@
+Keep existing daily videoRateLimit. V2 regeneration is additionally capped at 2 attempts per job. Never retry blindly; failed QC dimensions must be fed into the next director/render request.

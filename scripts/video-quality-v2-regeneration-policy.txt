@@ -1,0 +1,1 @@
+Regenerate only against explicit failed dimensions. Maximum automatic attempts: 2. After 2 failed attempts, stop spending credits and require review instead of looping.
