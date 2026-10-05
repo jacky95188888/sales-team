@@ -30,6 +30,7 @@ const ROUTES = new Set([
   "/threads-growth/publish",
   "/threads-growth/metrics",
   "/threads-growth/learn",
+  "/threads-growth/orchestrate",
   "/threads-growth/oauth-start",
   "/threads-growth/oauth/callback",
   "/hq-config",
@@ -199,6 +200,56 @@ async function autoFinalizeThreadsDraft(env, id, config) {
     await env.MONITOR.put("threads:growth:auto-publish-error:" + record.id, JSON.stringify({ at: Date.now(), error: message }), { expirationTtl: 604800 });
     await log("publish_failed", { error: message });
     return { status: "publish_failed", error: message, draft: JSON.parse((await env.MONITOR.get(key)) || "null") };
+  }
+}
+
+async function threadsOrchestrate(env, b = {}) {
+  if (!env.MONITOR) throw Object.assign(new Error("尚未綁定 MONITOR KV"), { status: 503 });
+  const goal = String(b.goal || "").trim().slice(0, 1200);
+  if (!goal) throw Object.assign(new Error("ORCHESTRATOR_GOAL_REQUIRED"), { status: 400 });
+  const cfgKey = "threads:growth:config";
+  const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get(cfgKey)) || "{}"));
+  // V1 is deliberately review-only. The orchestrator must never enable live publishing.
+  const safeConfig = { ...config, mode: "review", livePublishEnabled: false };
+  const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
+  const learned = JSON.parse((await env.MONITOR.get("threads:growth:learned")) || "{}");
+  const runId = "orch_" + Date.now() + "_" + crypto.randomUUID().slice(0, 6);
+  const startedAt = Date.now();
+  const logKey = "threads:growth:orchestrator:" + runId;
+  const save = async (status, extra = {}) => {
+    const row = { runId, goal, status, reviewOnly: true, livePublishEnabled: false, startedAt, updatedAt: Date.now(), ...extra };
+    await env.MONITOR.put(logKey, JSON.stringify(row), { expirationTtl: 2592000 });
+    await env.MONITOR.put("threads:growth:orchestrator:latest", JSON.stringify(row), { expirationTtl: 2592000 });
+    return row;
+  };
+  await save("researching");
+  try {
+    const research = await discoverThreadsTopics(env, { config: { ...safeConfig, topics: [goal, ...safeConfig.topics].slice(0, 12) }, history });
+    const candidates = (Array.isArray(research.candidates) ? research.candidates : [])
+      .filter((x) => x && String(x.topic || "").trim() && String(x.decision || "值得寫") === "值得寫")
+      .sort((a, b) => Number(a.priority || 99) - Number(b.priority || 99))
+      .slice(0, 3);
+    if (!candidates.length) throw new Error("ORCHESTRATOR_NO_WRITABLE_CANDIDATES");
+    const draftIds = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const context = [
+        "總指揮目標：" + goal,
+        c.angle ? "切角：" + c.angle : "",
+        c.whyNow ? "為什麼現在：" + c.whyNow : "",
+        c.sourceHint ? "來源提示：" + c.sourceHint : "",
+        c.risk ? "風險：" + c.risk : ""
+      ].filter(Boolean).join("\n");
+      const draft = await draftThreadsPost(env, { topic: c.topic, context, history, learned });
+      const id = "th_orch_" + Date.now() + "_" + (i + 1) + "_" + crypto.randomUUID().slice(0, 6);
+      const record = { id, status: "pending_review", source: "agent_orchestrator_v1", orchestratorRunId: runId, goal, topic: String(c.topic).slice(0, 300), research: c, ...draft, createdAt: Date.now(), updatedAt: Date.now() };
+      await env.MONITOR.put("threads:growth:draft:" + id, JSON.stringify(record), { expirationTtl: 2592000 });
+      draftIds.push(id);
+    }
+    return await save("waiting_review", { candidateCount: candidates.length, draftIds });
+  } catch (error) {
+    await save("failed", { error: String(error?.message || error).slice(0, 500) });
+    throw error;
   }
 }
 
@@ -2533,8 +2584,10 @@ export default {
       if (url.pathname === "/threads-growth/oauth-start")
         return json(await threadsOAuthStart(req, env), 200, H);
       if (url.pathname.startsWith("/threads-growth/")) {
-        if (["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/test-publish", "/threads-growth/publish", "/threads-growth/metrics", "/threads-growth/learn"].includes(url.pathname))
+        if (["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/test-publish", "/threads-growth/publish", "/threads-growth/metrics", "/threads-growth/learn", "/threads-growth/orchestrate"].includes(url.pathname))
           await requireThreadsApproval(req, env);
+        if (url.pathname === "/threads-growth/orchestrate")
+          return json(await threadsOrchestrate(env, b), 200, H);
         return json(await threadsGrowth(env, url.pathname, b), 200, H);
       }
       if (url.pathname === "/monitor-config")
