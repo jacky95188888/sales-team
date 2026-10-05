@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, pathToFileURL } from "node:path";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const tempDir = mkdtempSync(join(tmpdir(), "sales-team-worker-test-"));
 const threadsPath = join(tempDir, "threads-growth.mjs");
