@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, pathToFileURL } from "node:path";
 
-const threadsSource = readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8");
-const threadsModuleUrl = `data:text/javascript;base64,${Buffer.from(threadsSource).toString("base64")}`;
+const tempDir = mkdtempSync(join(tmpdir(), "sales-team-worker-test-"));
+const threadsPath = join(tempDir, "threads-growth.mjs");
+const workerPath = join(tempDir, "sales-team-worker.mjs");
+writeFileSync(threadsPath, readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8"));
 const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8")
-  .replace('"./threads-growth.js"', JSON.stringify(threadsModuleUrl));
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-const worker = (await import(moduleUrl)).default;
+  .replace('"./threads-growth.js"', '"./threads-growth.mjs"');
+writeFileSync(workerPath, source);
+const worker = (await import(pathToFileURL(workerPath).href)).default;
 
 class MemoryKV {
   constructor() { this.data = new Map(); }
