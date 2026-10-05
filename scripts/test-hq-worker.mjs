@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const threadsSource = readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8");
-const threadsModuleUrl = `data:text/javascript;base64,${Buffer.from(threadsSource).toString("base64")}`;
+const tempDir = mkdtempSync(join(tmpdir(), "sales-team-worker-test-"));
+const threadsPath = join(tempDir, "threads-growth.mjs");
+const workerPath = join(tempDir, "sales-team-worker.mjs");
+writeFileSync(threadsPath, readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8"));
 const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8")
-  .replace('"./threads-growth.js"', JSON.stringify(threadsModuleUrl));
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-const worker = (await import(moduleUrl)).default;
+  .replace('"./threads-growth.js"', '"./threads-growth.mjs"');
+writeFileSync(workerPath, source);
+const worker = (await import(pathToFileURL(workerPath).href)).default;
 
 class MemoryKV {
   constructor() { this.data = new Map(); }
@@ -46,6 +51,16 @@ async function post(path, body, headers) {
 }
 
 const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
+const agentHealth = await post("/health/agent", {});
+assert.equal(agentHealth.ok, true);
+assert.equal(agentHealth.orchestrator, true);
+assert.equal(agentHealth.monitor, true);
+assert.equal(agentHealth.anthropic.configured, false);
+assert.equal(agentHealth.threads.appConfigured, false);
+assert.equal(agentHealth.threads.oauthConfigured, false);
+assert.equal(agentHealth.threads.livePublishEnabled, false);
+assert.equal(agentHealth.approval.configured, true);
+
 const statusUnauthorized = await request("/threads-growth/status", {});
 assert.equal(statusUnauthorized.response.status, 401);
 assert.equal(statusUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");

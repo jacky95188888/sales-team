@@ -171,6 +171,11 @@ assert.match(deployWorker, /test "\$verified" = "1"/);
 // Autonomous Threads research runs once per Taiwan morning; publish behavior follows the owner-selected mode.
 assert.match(worker, /threadsAutonomousResearch/);
 assert.match(worker, /autonomous_daily_research/);
+assert.match(worker, /\/health\/agent/);
+assert.match(worker, /async function agentHealth/);
+assert.match(worker, /anthropic: \{ configured: Boolean\(env\.ANTHROPIC_KEY\) \}/);
+assert.match(worker, /oauthConfigured: Boolean\(env\.THREADS_ACCESS_TOKEN && env\.THREADS_USER_ID\)/);
+assert.doesNotMatch(worker, /health\/agent[^]*ANTHROPIC_KEY\s*[:=]\s*env\.ANTHROPIC_KEY/);
 assert.match(worker, /\/threads-growth\/orchestrate/);
 assert.match(worker, /agent_orchestrator_v1/);
 assert.match(worker, /reviewOnly: true/);

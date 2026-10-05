@@ -18,6 +18,7 @@ const ROUTES = new Set([
   "/monitor-config",
   "/monitor-subscribe",
   "/monitor-notes",
+  "/health/agent",
   "/threads-growth/status",
   "/threads-growth/config",
   "/threads-growth/discover",
@@ -57,6 +58,28 @@ const ROUTES = new Set([
   "/publish-video",
   "/publish-status",
 ]);
+async function agentHealth(env) {
+  let threadsConfig = {};
+  try {
+    threadsConfig = env.MONITOR ? normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}")) : {};
+  } catch {}
+  return {
+    ok: true,
+    service: "sales-team-agent",
+    orchestrator: true,
+    monitor: Boolean(env.MONITOR),
+    anthropic: { configured: Boolean(env.ANTHROPIC_KEY) },
+    threads: {
+      appConfigured: Boolean(env.THREADS_APP_ID && env.THREADS_APP_SECRET),
+      redirectConfigured: Boolean(env.THREADS_REDIRECT_URI),
+      oauthConfigured: Boolean(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID),
+      livePublishEnabled: threadsConfig.livePublishEnabled === true
+    },
+    approval: { configured: Boolean(env.APPROVAL_KEY_SHA256) },
+    checkedAt: new Date().toISOString()
+  };
+}
+
 async function threadsOAuthStart(req, env) {
   if (!env.THREADS_APP_ID || !env.THREADS_APP_SECRET) throw Object.assign(new Error("THREADS_APP_CONFIG_REQUIRED"), { status: 409 });
   const state = crypto.randomUUID();
@@ -2583,6 +2606,8 @@ export default {
       }
       if (url.pathname === "/threads-growth/oauth-start")
         return json(await threadsOAuthStart(req, env), 200, H);
+      if (url.pathname === "/health/agent") return json(await agentHealth(env), 200, H);
+
       if (url.pathname.startsWith("/threads-growth/")) {
         if (["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/test-publish", "/threads-growth/publish", "/threads-growth/metrics", "/threads-growth/learn", "/threads-growth/orchestrate"].includes(url.pathname))
           await requireThreadsApproval(req, env);
