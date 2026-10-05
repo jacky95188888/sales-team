@@ -2606,7 +2606,9 @@ export default {
       }
       if (url.pathname === "/threads-growth/oauth-start")
         return json(await threadsOAuthStart(req, env), 200, H);
-      if (url.pathname === "/health/agent") return json(await agentHealth(env), 200, H);\n\n      if (url.pathname.startsWith("/threads-growth/")) {
+      if (url.pathname === "/health/agent") return json(await agentHealth(env), 200, H);
+
+      if (url.pathname.startsWith("/threads-growth/")) {
         if (["/threads-growth/status", "/threads-growth/config", "/threads-growth/discover", "/threads-growth/research", "/threads-growth/research-now", "/threads-growth/draft", "/threads-growth/drafts", "/threads-growth/approve", "/threads-growth/test-publish", "/threads-growth/publish", "/threads-growth/metrics", "/threads-growth/learn", "/threads-growth/orchestrate"].includes(url.pathname))
           await requireThreadsApproval(req, env);
         if (url.pathname === "/threads-growth/orchestrate")
