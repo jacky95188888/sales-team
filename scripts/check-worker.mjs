@@ -171,7 +171,7 @@ assert.match(deployWorker, /test "\$verified" = "1"/);
 // Autonomous Threads research runs once per Taiwan morning; publish behavior follows the owner-selected mode.
 assert.match(worker, /threadsAutonomousResearch/);
 assert.match(worker, /autonomous_daily_research/);
-assert.match(worker, /threads:growth:research:latest/);
+assert.match(worker, /\/threads-growth\/orchestrate/);\nassert.match(worker, /agent_orchestrator_v1/);\nassert.match(worker, /reviewOnly: true/);\nassert.match(worker, /livePublishEnabled: false/);\nassert.match(worker, /threads:growth:research:latest/);
 assert.match(worker, /event\?\.cron !== "0 1 \* \* \*"/);
 assert.match(approvalConsole, /不必先下主題/);
 
