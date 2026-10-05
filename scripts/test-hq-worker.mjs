@@ -46,6 +46,16 @@ async function post(path, body, headers) {
 }
 
 const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
+const agentHealth = await post("/health/agent", {});
+assert.equal(agentHealth.ok, true);
+assert.equal(agentHealth.orchestrator, true);
+assert.equal(agentHealth.monitor, true);
+assert.equal(agentHealth.anthropic.configured, false);
+assert.equal(agentHealth.threads.appConfigured, false);
+assert.equal(agentHealth.threads.oauthConfigured, false);
+assert.equal(agentHealth.threads.livePublishEnabled, false);
+assert.equal(agentHealth.approval.configured, true);
+
 const statusUnauthorized = await request("/threads-growth/status", {});
 assert.equal(statusUnauthorized.response.status, 401);
 assert.equal(statusUnauthorized.data.error, "APPROVAL_UNAUTHORIZED");
