@@ -60,9 +60,31 @@ const ROUTES = new Set([
 ]);
 async function agentHealth(env) {
   let threadsConfig = {};
+  let dailyResearch = { status: "unavailable" };
   try {
     threadsConfig = env.MONITOR ? normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}")) : {};
   } catch {}
+  if (env.MONITOR) {
+    try {
+      const report = JSON.parse((await env.MONITOR.get("threads:growth:research:latest")) || "null");
+      const failure = JSON.parse((await env.MONITOR.get("threads:growth:auto-research-error")) || "null");
+      const today = taiwanDay();
+      const todayReport = report?.date === today ? report : null;
+      const todayFailure = failure?.date === today ? failure : null;
+      const error = String(todayFailure?.error || "");
+      const errorType = /^Anthropic (\d{3})\b/.exec(error);
+      dailyResearch = {
+        date: today,
+        status: todayFailure ? "failed" : todayReport?.draftIds ? "waiting_review" : todayReport ? "researching" : "not_recorded",
+        draftCount: todayReport?.draftIds?.length || 0,
+        lastUpdatedAt: todayFailure?.at || todayReport?.updatedAt || todayReport?.createdAt || null,
+        // Public diagnostics expose only a category; never include API bodies, drafts or tokens.
+        errorType: todayFailure ? (errorType ? `anthropic_http_${errorType[1]}` : error === "NO_RESEARCH_CANDIDATES" ? "no_candidates" : "research_failed") : null
+      };
+    } catch {
+      dailyResearch = { status: "diagnostics_unavailable" };
+    }
+  }
   return {
     ok: true,
     service: "sales-team-agent",
@@ -76,6 +98,7 @@ async function agentHealth(env) {
       livePublishEnabled: threadsConfig.livePublishEnabled === true
     },
     approval: { configured: Boolean(env.APPROVAL_KEY_SHA256) },
+    dailyResearch,
     checkedAt: new Date().toISOString()
   };
 }
@@ -2438,7 +2461,9 @@ async function threadsAutonomousResearch(env, event) {
   const marker = "threads:growth:auto-research:" + today;
   if (await env.MONITOR.get(marker)) return { status: "already_completed", date: today };
   try {
-    const config = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}"));
+    const storedConfig = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}"));
+    // The unattended cron is always review-only, even if an older setting selected auto.
+    const config = { ...storedConfig, mode: "review", livePublishEnabled: false };
     if (!config.enabled) return;
     const history = JSON.parse((await env.MONITOR.get("threads:growth:history")) || "[]");
     const learned = JSON.parse((await env.MONITOR.get("threads:growth:learned")) || "{}");
@@ -2492,12 +2517,6 @@ async function threadsAutonomousResearch(env, event) {
     report.draftIds = drafts;
     report.mode = config.mode;
     report.autoResults = [];
-    if (config.mode === "auto") {
-      const publishCount = Math.min(config.postsPerDay, drafts.length);
-      for (const id of drafts.slice(0, publishCount)) {
-        report.autoResults.push({ draftId: id, ...(await autoFinalizeThreadsDraft(env, id, config)) });
-      }
-    }
     report.updatedAt = Date.now();
     await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
     await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
