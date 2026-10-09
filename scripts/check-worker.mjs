@@ -168,13 +168,17 @@ assert.match(deployWorker, /for attempt in 1 2 3 4 5 6/);
 assert.match(deployWorker, /status" != "401"/);
 assert.match(deployWorker, /test "\$verified" = "1"/);
 
-// Autonomous Threads research runs once per Taiwan morning; publish behavior follows the owner-selected mode.
+// Autonomous Threads research runs once per Taiwan morning and never publishes unattended.
 assert.match(worker, /threadsAutonomousResearch/);
 assert.match(worker, /autonomous_daily_research/);
+assert.match(worker, /const config = \{ \.\.\.storedConfig, mode: "review", livePublishEnabled: false \}/);
+assert.doesNotMatch(worker.slice(worker.indexOf("async function threadsAutonomousResearch"), worker.indexOf("async function hqProcessAutoPublish")), /autoFinalizeThreadsDraft\(/);
+assert.match(worker, /dailyResearch/);
 assert.match(worker, /\/health\/agent/);
 assert.match(worker, /async function agentHealth/);
 assert.match(worker, /anthropic: \{ configured: Boolean\(env\.ANTHROPIC_KEY\) \}/);
-assert.match(worker, /oauthConfigured: Boolean\(env\.THREADS_ACCESS_TOKEN && env\.THREADS_USER_ID\)/);
+assert.match(worker, /oauthConfigured: oauthCredentialsPresent/);
+assert.match(worker, /env\.MONITOR\.get\("threads:growth:auth"\)/);
 assert.doesNotMatch(worker, /health\/agent[^]*ANTHROPIC_KEY\s*[:=]\s*env\.ANTHROPIC_KEY/);
 assert.match(worker, /\/threads-growth\/orchestrate/);
 assert.match(worker, /agent_orchestrator_v1/);
