@@ -52,6 +52,10 @@ async function post(path, body, headers) {
 
 const approvalHeaders = { "X-Approval-Key": "test-approval-pin" };
 const agentHealth = await post("/health/agent", {});
+const getHealthResponse = await worker.fetch(new Request("https://worker.example/health/agent"), env);
+assert.equal(getHealthResponse.status, 200);
+assert.equal(getHealthResponse.headers.get("Cache-Control"), "no-store");
+assert.deepEqual(await getHealthResponse.json(), agentHealth);
 assert.equal(agentHealth.ok, true);
 assert.equal(agentHealth.orchestrator, true);
 assert.equal(agentHealth.monitor, true);

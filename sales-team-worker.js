@@ -501,7 +501,7 @@ function cors(req) {
   const o = req.headers.get("Origin") || ORIGIN;
   return {
     "Access-Control-Allow-Origin": o === ORIGIN ? o : ORIGIN,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Approval-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -2600,6 +2600,8 @@ export default {
         return json({ error: "ORIGIN_DENIED" }, 403, H);
       if (!ROUTES.has(url.pathname))
         return json({ error: "NOT_FOUND" }, 404, H);
+      if (url.pathname === "/health/agent" && req.method === "GET")
+        return json(await agentHealth(env), 200, H);
       if (url.pathname === "/monitor-notes" && req.method === "GET")
         return json(
           {
