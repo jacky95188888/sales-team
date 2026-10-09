@@ -61,6 +61,11 @@ const ROUTES = new Set([
 async function agentHealth(env) {
   let threadsConfig = {};
   let dailyResearch = { status: "unavailable" };
+  let oauthCredentialsPresent = Boolean(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID);
+  try {
+    const savedAuth = env.MONITOR ? JSON.parse((await env.MONITOR.get("threads:growth:auth")) || "null") : null;
+    oauthCredentialsPresent ||= Boolean(savedAuth?.accessToken && savedAuth?.userId);
+  } catch {}
   try {
     threadsConfig = env.MONITOR ? normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}")) : {};
   } catch {}
@@ -94,7 +99,8 @@ async function agentHealth(env) {
     threads: {
       appConfigured: Boolean(env.THREADS_APP_ID && env.THREADS_APP_SECRET),
       redirectConfigured: Boolean(env.THREADS_REDIRECT_URI),
-      oauthConfigured: Boolean(env.THREADS_ACCESS_TOKEN && env.THREADS_USER_ID),
+      // Presence only: an actual Threads API call is required to prove token validity.
+      oauthConfigured: oauthCredentialsPresent,
       livePublishEnabled: threadsConfig.livePublishEnabled === true
     },
     approval: { configured: Boolean(env.APPROVAL_KEY_SHA256) },
