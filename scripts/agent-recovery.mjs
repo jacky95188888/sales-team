@@ -5,7 +5,7 @@ const ACCOUNT = '22bd6a71b50e9eeaa0daa802615a3459';
 
 // Fixed destinations only. Never print provider responses, headers or credentials.
 export async function recover({ env = process.env, request = fetch, now = new Date() } = {}) {
-  const report = { checkedAt: now.toISOString(), ai: 'unknown', threads: 'unknown', action: 'none', blockers: [] };
+  const report = { checkedAt: now.toISOString(), ai: 'unknown', threads: 'unknown', cloudflare: 'unknown', aiBindings: [], action: 'none', blockers: [] };
   const call = async (url, options = {}) => request(url, { ...options, signal: AbortSignal.timeout(20000) });
   let health;
   try {
@@ -22,9 +22,22 @@ export async function recover({ env = process.env, request = fetch, now = new Da
   if (!health.threads?.livePublishEnabled) report.blockers.push('Threads 正式發布開關關閉；本修復工作不會替你開啟。');
   report.ai = health.anthropic?.configured ? 'configured_not_verified' : 'missing';
   const failed = health.dailyResearch?.errorType === 'anthropic_http_401';
+  const cfToken = String(env.CLOUDFLARE_API_TOKEN || '').trim();
+  let secretNames = null;
+  if (cfToken) {
+    try {
+      const response = await call(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/sales-team/secrets`, {
+        headers: { Authorization: `Bearer ${cfToken}` }
+      });
+      const data = await response.json();
+      if (!response.ok || data.success !== true || !Array.isArray(data.result)) throw new Error('metadata_unavailable');
+      secretNames = data.result.map(x => x.name);
+      report.cloudflare = 'worker_access_verified';
+      report.aiBindings = secretNames.filter(x => ['ANTHROPIC_KEY', 'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'].includes(x));
+    } catch { report.cloudflare = 'worker_access_unverified'; }
+  } else report.cloudflare = 'credential_missing';
   if (!failed && health.anthropic?.configured) return report;
   const key = String(env.ANTHROPIC_KEY || env.ANTHROPIC_API_KEY || '').trim();
-  const cfToken = String(env.CLOUDFLARE_API_TOKEN || '').trim();
   if (!key) {
     report.ai = failed ? 'authentication_failed' : 'missing';
     report.blockers.push('GitHub 未提供備用 ANTHROPIC_KEY 或 ANTHROPIC_API_KEY；不能憑空修復金鑰。');
@@ -59,12 +72,8 @@ export async function recover({ env = process.env, request = fetch, now = new Da
   try {
     // Publisher tokens can fall back to encryption with ANTHROPIC_KEY. Do not
     // rotate it unless an independent publisher encryption secret is present.
-    const metadata = await call(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/sales-team/secrets`, {
-      headers: { Authorization: `Bearer ${cfToken}` }
-    });
-    const bindings = await metadata.json();
-    if (!metadata.ok || bindings.success !== true || !Array.isArray(bindings.result)) throw new Error('secret_metadata_unavailable');
-    if (!bindings.result.some(x => ['PUBLISH_TOKEN_KEY', 'YOUTUBE_CLIENT_SECRET'].includes(x.name))) {
+    if (!secretNames) throw new Error('secret_metadata_unavailable');
+    if (!secretNames.some(x => ['PUBLISH_TOKEN_KEY', 'YOUTUBE_CLIENT_SECRET'].includes(x))) {
       report.action = 'encryption_dependency_blocked';
       report.blockers.push('影片授權可能使用 AI 金鑰加密；未確認獨立的加密設定，因此不自動更換金鑰。');
       return report;
@@ -86,7 +95,7 @@ export async function recover({ env = process.env, request = fetch, now = new Da
 }
 
 export function summary(report) {
-  return ['## 顧問團代理修復結果', '', `檢查時間：${report.checkedAt}`, `AI：${report.ai}`, `Threads：${report.threads}`, `執行：${report.action}`, '', ...report.blockers.map(x => `- ${x}`), '', '此工作只處理 AI 憑證修復；不修改 PIN、不產片、不發布貼文。'].join('\n');
+  return ['## 顧問團代理修復結果', '', `檢查時間：${report.checkedAt}`, `AI：${report.ai}`, `Cloudflare：${report.cloudflare}`, `已保存 AI 設定名稱：${report.aiBindings.join('、') || '未確認'}`, `Threads：${report.threads}`, `執行：${report.action}`, '', ...report.blockers.map(x => `- ${x}`), '', '此工作只處理 AI 憑證修復；不修改 PIN、不產片、不發布貼文。'].join('\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
