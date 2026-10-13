@@ -1,0 +1,43 @@
+name: Agent Connection Recovery
+
+on:
+  schedule:
+    - cron: '15 2 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/agent-recovery.yml'
+      - 'scripts/agent-recovery.mjs'
+      - 'scripts/test-agent-recovery.mjs'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Sync a validated existing GitHub AI key to the sales-team Worker
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sales-team-production
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify bounded recovery behavior
+        run: node scripts/test-agent-recovery.mjs
+      - name: Diagnose and recover existing credentials
+        env:
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RECOVERY_APPLY: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply) }}
+        run: node scripts/agent-recovery.mjs
