@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sales Team Video Director Plan V2",
+  "type": "object",
+  "required": ["hook", "thesis", "cta", "scenes"],
+  "properties": {
+    "hook": { "type": "string", "minLength": 1 },
+    "thesis": { "type": "string", "minLength": 1 },
+    "cta": { "type": "string", "minLength": 1 },
+    "scenes": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["start", "end", "purpose", "visual"],
+        "properties": {
+          "id": { "type": "string" },
+          "start": { "type": "number", "minimum": 0 },
+          "end": { "type": "number", "exclusiveMinimum": 0 },
+          "purpose": { "type": "string", "minLength": 1 },
+          "visual": { "type": "string", "minLength": 1 },
+          "narration": { "type": "string" },
+          "subtitle": { "type": "string" },
+          "assetType": { "type": "string" },
+          "assetUrl": { "type": "string" },
+          "presenter": { "type": "string" },
+          "transition": { "type": "string" }
+        }
+      }
+    }
+  }
+}

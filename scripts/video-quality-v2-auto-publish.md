@@ -1,0 +1,1 @@
+V2 rollout 期間維持正式站原本設定。新 V2 任務即使 render 完成，也必須先通過 quality gate；第一支母片還需要人工驗收。母片核准前，不把 V2 接到正式 autoPublishEnabled。

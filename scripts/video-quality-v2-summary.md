@@ -1,0 +1,1 @@
+已建立可執行的 V2 品質核心：director plan 正規化、preflight、100 分評分、80 分門檻、hard failure 一票否決、regenerate/publish_queue 狀態決策，以及 A/B 兩條產線不同視覺語言。下一步只接 Worker，不再改品質規格。

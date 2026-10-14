@@ -1,0 +1,4 @@
+PR title: 影片品質 V2：導演層與成片品質閘門
+base: main
+head: upgrade/video-quality-v2
+status: draft until integration + mother video acceptance

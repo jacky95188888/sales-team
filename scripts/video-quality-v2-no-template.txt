@@ -1,0 +1,1 @@
+The fixture is an acceptance example only. Never reuse its wording as a production template. Director plans must be regenerated from current topic, route, product/profile, platform and available assets.

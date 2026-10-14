@@ -1,0 +1,1 @@
+STOP automatic regeneration after 2 failed attempts. Preserve credits and surface failed dimensions for review.

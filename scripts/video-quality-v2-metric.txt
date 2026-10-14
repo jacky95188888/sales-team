@@ -1,0 +1,1 @@
+SUCCESS = user judges mother video publishable + quality gate >=80 + no hard failures + no regression in existing automation path.
