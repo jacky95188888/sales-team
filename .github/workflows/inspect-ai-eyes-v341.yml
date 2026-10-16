@@ -60,6 +60,22 @@ jobs:
             'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/deployments')
           echo "deployments_http=$deployments_http"
           if [ "$deployments_http" = 200 ]; then
-            jq -c '.result.deployments[:5] | map({created_on,versions: [.versions[]? | {version_id,percentage}]})' worker-deployments.json
+            jq -c '.result.deployments[:5] | map({created_on,versions: [.versions[]? | {version_id,percentage}]})' worker-deployments.json worker-versions.json version-response.txt
+          fi
+          versions_http=$(curl --silent --show-error --max-time 20 --output worker-versions.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/versions?per_page=50')
+          echo "versions_http=$versions_http"
+          if [ "$versions_http" = 200 ]; then
+            jq -c '{success, result_type: (.result|type), result_keys: (if (.result|type) == "object" then (.result|keys) else [] end), count: (if (.result|type) == "array" then (.result|length) else (.result.items // .result.versions // []|length) end)}' worker-versions.json
+            jq -r '(.result | if type == "array" then . else (.items // .versions // []) end)[:30][] | [.id, .created_on, (.source // ""), (.number // "")] | @tsv' worker-versions.json | while IFS="$(printf '\t')" read -r vid created source number; do
+              [ -z "$vid" ] && continue
+              prefix=${vid:0:8}
+              version_status=$(curl --silent --show-error --max-time 8 --output version-response.txt --write-out '%{http_code}' "https://${prefix}-ai-eyes-video.rhtm9y855y.workers.dev/" || true)
+              if grep -Fq 'AI Eyes' version-response.txt; then kind=ai_eyes
+              elif grep -Fq 'POST_ONLY' version-response.txt; then kind=post_only
+              else kind=other; fi
+              echo "version=$vid created=$created source=$source number=$number root_http=$version_status root_kind=$kind"
+            done
           fi
           rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json
