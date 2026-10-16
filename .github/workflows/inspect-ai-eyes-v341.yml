@@ -75,7 +75,16 @@ jobs:
               if grep -Fq 'AI Eyes' version-response.txt; then kind=ai_eyes
               elif grep -Fq 'POST_ONLY' version-response.txt; then kind=post_only
               else kind=other; fi
-              echo "version=$vid created=$created source=$source number=$number root_http=$version_status root_kind=$kind"
+              if [ "$kind" = ai_eyes ]; then
+                if grep -Fq 'AI Eyes V3.3' version-response.txt; then label=v33
+                elif grep -Fq 'AI Eyes V3.4.1' version-response.txt; then label=v341
+                else label=other_ai_eyes; fi
+                health_status=$(curl --silent --show-error --max-time 8 --output version-health.txt --write-out '%{http_code}' "https://${prefix}-ai-eyes-video.rhtm9y855y.workers.dev/health" || true)
+                if [ "$health_status" = 200 ]; then
+                  health_info=$(jq -c '{version, secrets, model}' version-health.txt 2>/dev/null || echo non_json)
+                else health_info=unavailable; fi
+              else label=none; health_status=none; health_info=none; fi
+              echo "version=$vid number=$created root_http=$version_status root_kind=$kind label=$label health_http=$health_status health=$health_info"
             done
           fi
-          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json worker-versions.json version-response.txt
+          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json worker-versions.json version-response.txt version-health.txt
