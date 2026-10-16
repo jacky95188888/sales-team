@@ -1,0 +1,104 @@
+name: Inspect AI Eyes test prerequisites
+
+on:
+  push:
+    branches: [codex/ai-eyes-v341-test-deploy]
+    paths:
+      - .github/workflows/inspect-ai-eyes-v341.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Report availability without exposing values
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_EYES_ACCESS_TOKEN: ${{ secrets.AI_EYES_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo 'cloudflare_token=missing'; exit 1
+          fi
+          if [ -n "$GEMINI_API_KEY" ]; then echo 'github_gemini_key=present'; else echo 'github_gemini_key=missing'; fi
+          if [ -n "$AI_EYES_ACCESS_TOKEN" ]; then echo 'github_ai_eyes_access_token=present'; else echo 'github_ai_eyes_access_token=missing'; fi
+          status=$(curl --silent --show-error --output cf-result.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/secrets')
+          echo "existing_ai_eyes_metadata_http=$status"
+          if [ "$status" = 200 ] && jq -e '.success == true and (.result | type == "array")' cf-result.json >/dev/null; then
+            jq -r '"existing_ai_eyes_gemini_key=" + (if any(.result[]; .name == "GEMINI_API_KEY") then "present" else "missing" end),
+                   "existing_ai_eyes_access_token=" + (if any(.result[]; .name == "ACCESS_TOKEN") then "present" else "missing" end)' cf-result.json
+          fi
+          test_status=$(curl --silent --show-error --output cf-test-result.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video-v34-test/secrets')
+          echo "test_ai_eyes_metadata_http=$test_status"
+          for route in / /health /analyze; do
+            public_status=$(curl --silent --show-error --max-time 12 --output public-response.txt --write-out '%{http_code}' \
+              "https://ai-eyes-video.rhtm9y855y.workers.dev$route")
+            if grep -Fq 'POST_ONLY' public-response.txt; then kind=post_only
+            elif grep -Fq 'AI Eyes' public-response.txt; then kind=ai_eyes
+            elif grep -Fq '"ok"' public-response.txt; then kind=json_status
+            else kind=other; fi
+            echo "public_route=$route http=$public_status kind=$kind"
+          done
+          script_status=$(curl --silent --show-error --max-time 15 --output worker-source.txt --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video')
+          echo "worker_source_http=$script_status"
+          if [ "$script_status" = 200 ]; then
+            for marker in 'AI Eyes V3.3' 'AI Eyes V3.4.1' 'POST_ONLY' 'OpenAI' 'Interactions'; do
+              if grep -Fq "$marker" worker-source.txt; then echo "source_marker_$marker=present"; fi
+            done
+          fi
+          deployments_http=$(curl --silent --show-error --max-time 15 --output worker-deployments.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/deployments')
+          echo "deployments_http=$deployments_http"
+          if [ "$deployments_http" = 200 ]; then
+            jq -c '.result.deployments[:5] | map({created_on,versions: [.versions[]? | {version_id,percentage}]})' worker-deployments.json
+          fi
+          versions_http=$(curl --silent --show-error --max-time 20 --output worker-versions.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/versions?per_page=50')
+          echo "versions_http=$versions_http"
+          if [ "$versions_http" = 200 ]; then
+            jq -c '{success, result_type: (.result|type), result_keys: (if (.result|type) == "object" then (.result|keys) else [] end), count: (if (.result|type) == "array" then (.result|length) else (.result.items // .result.versions // []|length) end)}' worker-versions.json
+            jq -r '(.result | if type == "array" then . else (.items // .versions // []) end)[:30][] | [.id, .created_on, (.source // ""), (.number // "")] | @tsv' worker-versions.json | while IFS="$(printf '\t')" read -r vid created source number; do
+              [ -z "$vid" ] && continue
+              prefix=${vid:0:8}
+              version_status=$(curl --silent --show-error --max-time 8 --output version-response.txt --write-out '%{http_code}' "https://${prefix}-ai-eyes-video.rhtm9y855y.workers.dev/" || true)
+              if grep -Fq 'AI Eyes' version-response.txt; then kind=ai_eyes
+              elif grep -Fq 'POST_ONLY' version-response.txt; then kind=post_only
+              else kind=other; fi
+              if [ "$kind" = ai_eyes ]; then
+                if grep -Fq 'AI Eyes V3.3' version-response.txt; then label=v33
+                elif grep -Fq 'AI Eyes V3.4.1' version-response.txt; then label=v341
+                else label=other_ai_eyes; fi
+                health_status=$(curl --silent --show-error --max-time 8 --output version-health.txt --write-out '%{http_code}' "https://${prefix}-ai-eyes-video.rhtm9y855y.workers.dev/health" || true)
+                if [ "$health_status" = 200 ]; then
+                  health_info=$(jq -c '{version, secrets, model}' version-health.txt 2>/dev/null || echo non_json)
+                else health_info=unavailable; fi
+              else label=none; health_status=none; health_info=none; fi
+              echo "version=$vid number=$created root_http=$version_status root_kind=$kind label=$label health_http=$health_status health=$health_info"
+            done
+          fi
+          for route in / /health; do
+            for attempt in 1 2 3; do
+              test_public_status=$(curl --silent --show-error --max-time 12 --output test-public.txt --write-out '%{http_code}' "https://ai-eyes-video-v34-test.rhtm9y855y.workers.dev$route" || true)
+              [ "$test_public_status" = 200 ] && break
+              sleep 2
+            done
+            if [ "$route" = /health ] && [ "$test_public_status" = 200 ]; then
+              echo "test_route=$route http=$test_public_status"
+              jq -c '{ok, version, secrets, model}' test-public.txt
+            else
+              if grep -Fq 'AI Eyes V3.4.1' test-public.txt; then test_kind=v341; else test_kind=other; fi
+              echo "test_route=$route http=$test_public_status kind=$test_kind"
+            fi
+          done
+          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json worker-versions.json version-response.txt version-health.txt test-public.txt
