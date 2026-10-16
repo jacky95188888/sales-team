@@ -26,6 +26,7 @@ export class AiEyesMCP extends McpAgent<Env, Record<string, never>, Props> {
       try {
         const videoUrl = normalizeYouTubeUrl(url);
         const result = await aiEyesCall(this.env, "/analyze", { mode: "background", videoUrl });
+        if (!result.id || typeof result.id !== "string") throw new Error("AI Eyes did not return a usable job ID");
         return { content: [{ type: "text", text: JSON.stringify({
           ok: true, jobId: result.id, status: result.status, model: result.model,
           videoUrl, note: "Job created. Poll get_video_result with this ID."
