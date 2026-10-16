@@ -1,5 +1,30 @@
 # AI Eyes V3.4.1 test deployment
 
+## Staging status (2026-10-16)
+
+The isolated candidate Worker is deployed at
+https://ai-eyes-video-v34-test.rhtm9y855y.workers.dev/ .
+The verified staging run is
+https://github.com/jacky95188888/sales-team/actions/runs/38895849283 .
+Its UI and health route respond successfully. The read-only diagnostic run
+https://github.com/jacky95188888/sales-team/actions/runs/38895768129
+reports both GEMINI_API_KEY and ACCESS_TOKEN as false for the test Worker.
+The production AI Eyes V3.3 remains deployed and retains its own bindings.
+
+To enable live API tests, open Cloudflare Workers & Pages > ai-eyes-video-v34-test
+> Settings > Variables and Secrets > Add. Add GEMINI_API_KEY and ACCESS_TOKEN
+as encrypted Secrets to **the test Worker only**. A known valid Gemini API key
+may be reused, or a distinct key can be created in Google AI Studio.
+Do not place either value in git, chat, or Actions logs. Confirm /health
+reports both bindings true, then use ① /models and ② /text with the test
+ACCESS_TOKEN. A 200 /health by itself does not prove a Google call succeeds.
+The name gemini-3.8-flash is a default setting, not a verified model name.
+
+The staging Worker currently contains the V3.4.1-compatible reconstructed
+candidate described above. Replace it with the complete original code before
+calling it the exact V3.4.1 release.
+
+
 This branch prepares a separate Cloudflare Worker named `ai-eyes-video-v34-test`.
 The production `ai-eyes-video` Worker and `sales-team` Worker are not deployment targets.
 
