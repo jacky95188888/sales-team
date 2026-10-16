@@ -55,4 +55,11 @@ jobs:
               if grep -Fq "$marker" worker-source.txt; then echo "source_marker_$marker=present"; fi
             done
           fi
-          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt
+          deployments_http=$(curl --silent --show-error --max-time 15 --output worker-deployments.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/deployments')
+          echo "deployments_http=$deployments_http"
+          if [ "$deployments_http" = 200 ]; then
+            jq -c '.result.deployments[:5] | map({created_on,versions: [.versions[]? | {version_id,percentage}]})' worker-deployments.json
+          fi
+          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json
