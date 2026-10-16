@@ -33,4 +33,8 @@ jobs:
             jq -r '"existing_ai_eyes_gemini_key=" + (if any(.result[]; .name == "GEMINI_API_KEY") then "present" else "missing" end),
                    "existing_ai_eyes_access_token=" + (if any(.result[]; .name == "ACCESS_TOKEN") then "present" else "missing" end)' cf-result.json
           fi
-          rm -f cf-result.json
+          test_status=$(curl --silent --show-error --output cf-test-result.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video-v34-test/secrets')
+          echo "test_ai_eyes_metadata_http=$test_status"
+          rm -f cf-result.json cf-test-result.json
