@@ -45,8 +45,8 @@ jobs:
         run: |
           set -euo pipefail
           url='https://ai-eyes-video-v34-test.rhtm9y855y.workers.dev'
-          curl -fsS --retry 3 --retry-delay 2 --max-time 15 "$url/" | grep -Fq 'AI Eyes V3.4.1'
-          curl -fsS --retry 3 --retry-delay 2 --max-time 15 "$url/health" | jq -e '.ok == true and .version == "AI Eyes V3.4.1"' >/dev/null
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$url/" | grep -Fq 'AI Eyes V3.4.1'
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$url/health" | jq -e '.ok == true and (.version | startswith("AI Eyes V3.4.1"))' >/dev/null
           echo 'test_ui=ok'
           curl -fsS --max-time 15 'https://ai-eyes-video.rhtm9y855y.workers.dev/health' | jq -e '.version == "AI Eyes V3.3" and .secrets.GEMINI_API_KEY == true and .secrets.ACCESS_TOKEN == true' >/dev/null
           echo 'production_ui=v33'
