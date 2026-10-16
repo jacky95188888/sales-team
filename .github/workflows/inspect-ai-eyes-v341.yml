@@ -60,7 +60,7 @@ jobs:
             'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/deployments')
           echo "deployments_http=$deployments_http"
           if [ "$deployments_http" = 200 ]; then
-            jq -c '.result.deployments[:5] | map({created_on,versions: [.versions[]? | {version_id,percentage}]})' worker-deployments.json worker-versions.json version-response.txt
+            jq -c '.result.deployments[:5] | map({created_on,versions: [.versions[]? | {version_id,percentage}]})' worker-deployments.json
           fi
           versions_http=$(curl --silent --show-error --max-time 20 --output worker-versions.json --write-out '%{http_code}' \
             --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -78,4 +78,4 @@ jobs:
               echo "version=$vid created=$created source=$source number=$number root_http=$version_status root_kind=$kind"
             done
           fi
-          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json
+          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json worker-versions.json version-response.txt
