@@ -7,9 +7,12 @@ import { pathToFileURL } from "node:url";
 const tempDir = mkdtempSync(join(tmpdir(), "sales-team-worker-test-"));
 const threadsPath = join(tempDir, "threads-growth.mjs");
 const workerPath = join(tempDir, "sales-team-worker.mjs");
+const analyticsPath = join(tempDir, "tool-analytics.mjs");
 writeFileSync(threadsPath, readFileSync(new URL("../threads-growth.js", import.meta.url), "utf8"));
+writeFileSync(analyticsPath, readFileSync(new URL("../tool-analytics.js", import.meta.url), "utf8"));
 const source = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8")
-  .replace('"./threads-growth.js"', '"./threads-growth.mjs"');
+  .replace('"./threads-growth.js"', '"./threads-growth.mjs"')
+  .replace('"./tool-analytics.js"', '"./tool-analytics.mjs"');
 writeFileSync(workerPath, source);
 const worker = (await import(pathToFileURL(workerPath).href)).default;
 
