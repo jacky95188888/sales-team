@@ -18,7 +18,7 @@ may be reused, or a distinct key can be created in Google AI Studio.
 Do not place either value in git, chat, or Actions logs. Confirm /health
 reports both bindings true, then use ① /models and ② /text with the test
 ACCESS_TOKEN. A 200 /health by itself does not prove a Google call succeeds.
-The name gemini-3.8-flash is a default setting, not a verified model name.
+Google documents gemini-3.8-flash as a stable video-input model. This does not establish whether this account, region, or key can actually call it; only the live /models, /text, then a controlled video test can do that.
 
 The staging Worker currently contains the V3.4.1-compatible reconstructed
 candidate described above. Replace it with the complete original code before
