@@ -7,12 +7,17 @@ Before the manual workflow can run, commit the exact user-reviewed V3.4.1
 single-file source as `ai-eyes/worker-v3.4.1.js`. The program pasted in chat
 is not currently a file in this repository. Do not substitute V3.1 or V3.3.
 
-The workflow uses the existing `CLOUDFLARE_API_TOKEN` from the protected
-`production` GitHub environment. It requires separately available GitHub
-secrets `GEMINI_API_KEY` and `AI_EYES_ACCESS_TOKEN`; their presence has not
-been verified. Existing Cloudflare Worker secrets cannot be read back or
-implicitly copied to a new Worker. Add verified values securely if absent,
-without printing them in a PR, log, or chat.
+The existing `CLOUDFLARE_API_TOKEN` in the protected `production` GitHub
+environment read the current AI Eyes secret metadata successfully (HTTP 200).
+The current `ai-eyes-video` Worker has secrets named `GEMINI_API_KEY` and
+`ACCESS_TOKEN`, but the GitHub production environment did **not** provide
+`GEMINI_API_KEY` or `AI_EYES_ACCESS_TOKEN` to the diagnostic job on
+2026-10-16. This confirms the exact credential gap for a separate test Worker.
+Cloudflare returns the names, not the values, so the existing secret values
+cannot be copied out or inferred. A verified Gemini key and a test access
+secret must be supplied to GitHub production secrets or provisioned directly
+to the new Worker using the user's authenticated account. Never print secret
+values in a PR, log, or chat.
 
 Once source and secrets are ready, manually dispatch
 `Deploy AI Eyes V3.4.1 test Worker` with input `TEST`. The job checks
