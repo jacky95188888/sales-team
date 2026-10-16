@@ -74,6 +74,20 @@ jobs:
           test "$status" = "200"
           jq -e 'has("notes")' response.json >/dev/null
 
+          # An isolated probe proves the production MONITOR KV binding can write,
+          # read back and delete without changing any public page-view total.
+          storage_verified=0
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl --silent --show-error --output analytics-health.json --write-out '%{http_code}' \
+              "$base/tool-analytics/health")
+            if [ "$status" = "200" ] && jq -e '.ok == true and .storage == "write_read_delete"' analytics-health.json >/dev/null; then
+              storage_verified=1
+              break
+            fi
+            sleep 5
+          done
+          test "$storage_verified" = "1"
+
           # Production safety smoke test: protected Threads routes must reject
           # requests that do not carry the human approval PIN.
           # A newly deployed Worker can take a few seconds to become visible at every edge.
