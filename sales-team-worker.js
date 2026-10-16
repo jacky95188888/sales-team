@@ -1,8 +1,11 @@
+import { toolAnalytics } from "./tool-analytics.js";
 import { discoverThreadsTopics, draftThreadsPost, learnFromThreadsMetrics, normalizeThreadsConfig } from "./threads-growth.js";
 
 const MODEL = "claude-sonnet-4-6",
   ORIGIN = "https://jacky95188888.github.io";
 const ROUTES = new Set([
+  "/tool-analytics/track",
+  "/tool-analytics/stats",
   "/",
   "/opinions",
   "/collect",
@@ -2600,6 +2603,7 @@ export default {
         return json({ error: "ORIGIN_DENIED" }, 403, H);
       if (!ROUTES.has(url.pathname))
         return json({ error: "NOT_FOUND" }, 404, H);
+      if (url.pathname.startsWith("/tool-analytics/")) return await toolAnalytics(req, env);
       if (url.pathname === "/health/agent" && req.method === "GET")
         return json(await agentHealth(env), 200, H);
       if (url.pathname === "/monitor-notes" && req.method === "GET")

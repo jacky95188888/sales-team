@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - tool-analytics.js
       - sales-team-worker.js
       - hq-patch.js
       - wrangler.jsonc
