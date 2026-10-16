@@ -87,4 +87,18 @@ jobs:
               echo "version=$vid number=$created root_http=$version_status root_kind=$kind label=$label health_http=$health_status health=$health_info"
             done
           fi
-          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json worker-versions.json version-response.txt version-health.txt
+          for route in / /health; do
+            for attempt in 1 2 3; do
+              test_public_status=$(curl --silent --show-error --max-time 12 --output test-public.txt --write-out '%{http_code}' "https://ai-eyes-video-v34-test.rhtm9y855y.workers.dev$route" || true)
+              [ "$test_public_status" = 200 ] && break
+              sleep 2
+            done
+            if [ "$route" = /health ] && [ "$test_public_status" = 200 ]; then
+              echo "test_route=$route http=$test_public_status"
+              jq -c '{ok, version, secrets, model}' test-public.txt
+            else
+              if grep -Fq 'AI Eyes V3.4.1' test-public.txt; then test_kind=v341; else test_kind=other; fi
+              echo "test_route=$route http=$test_public_status kind=$test_kind"
+            fi
+          done
+          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt worker-deployments.json worker-versions.json version-response.txt version-health.txt test-public.txt
