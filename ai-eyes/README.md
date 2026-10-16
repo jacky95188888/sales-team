@@ -3,9 +3,14 @@
 This branch prepares a separate Cloudflare Worker named `ai-eyes-video-v34-test`.
 The production `ai-eyes-video` Worker and `sales-team` Worker are not deployment targets.
 
-Before the manual workflow can run, commit the exact user-reviewed V3.4.1
-single-file source as `ai-eyes/worker-v3.4.1.js`. The program pasted in chat
-is not currently a file in this repository. Do not substitute V3.1 or V3.3.
+The branch contains `ai-eyes/worker-v3.4.1.js`, a V3.4.1-compatible test
+implementation reconstructed from the program pasted in chat. It is **not a
+byte-for-byte copy** of that full program. It preserves the Interactions
+background flow, routes, privacy modes, guarded retries and PWA shell, while
+simplifying the mobile report rendering, timestamp checks, and local
+verification persistence. Review those differences before treating this as
+the original V3.4.1 release. The branch includes mock route smoke tests; no
+live Google video analysis has been run with this test build.
 
 The existing `CLOUDFLARE_API_TOKEN` in the protected `production` GitHub
 environment read the current AI Eyes secret metadata successfully (HTTP 200).
