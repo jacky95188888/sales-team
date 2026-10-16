@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-eyes-video-v34-test",
+  "main": "ai-eyes/worker-v3.4.1.js",
+  "compatibility_date": "2026-10-16",
+  "workers_dev": true,
+  "vars": {
+    "GEMINI_MODEL": "gemini-3.8-flash",
+    "WORKER_LABEL": "V3.4 測試"
+  }
+}
