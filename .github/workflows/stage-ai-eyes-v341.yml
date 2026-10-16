@@ -5,6 +5,7 @@ on:
     branches: [codex/ai-eyes-v341-test-deploy]
     paths:
       - .github/workflows/stage-ai-eyes-v341.yml
+      - ai-eyes/wrangler.test.jsonc
 
 permissions:
   contents: read
