@@ -20,7 +20,7 @@ export async function toolAnalytics(req, env) {
     const page=String(b.page||'').split(/[?#]/)[0];
     if(!page.startsWith('/'+b.tool+'/')||page.length>180||/[\x00-\x1f]/.test(page)||/admin|analytics|preview|test|demo/i.test(page)) return reply({error:'INVALID_PAGE'},400);
     const referrer=req.headers.get('Referer');
-    if(referrer&&!referrer.startsWith(origin+'/'+b.tool+'/')) return reply({error:'TOOL_MISMATCH'},403);
+    if(referrer&&!referrer.startsWith(origin+'/')) return reply({error:'TOOL_MISMATCH'},403);
     // Each document has an immutable key: concurrent views never overwrite each other.
     const day=analyticsDay(),key=`toolviews:v1:${b.tool}:${day}:${b.id}`;
     await env.MONITOR.put(key,'1',{metadata:{day,page}});

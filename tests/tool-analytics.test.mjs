@@ -19,3 +19,5 @@ test('reject management pages, unknown tools, mismatched paths and cross-origin 
  const r=track(event());r.headers.set('Origin','https://evil.example');assert.equal((await toolAnalytics(r,env)).status,403);assert.equal(env.records.size,0);
 });
 test('method and payload validation',async()=>{const env=fixture();assert.equal((await toolAnalytics(new Request('https://worker/tool-analytics/track'),env)).status,405);assert.equal((await toolAnalytics(track(event({page:'/dream-library/'+ 'a'.repeat(2100)})),env)).status,413)});
+
+test('browser origin-only referrer is accepted',async()=>{const env=fixture(),r=track(event());r.headers.set('Referer','https://jacky95188888.github.io/');assert.equal((await toolAnalytics(r,env)).status,202);assert.equal(env.records.size,1)});
