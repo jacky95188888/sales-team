@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/stage-ai-eyes-v341.yml
       - ai-eyes/wrangler.test.jsonc
+      - ai-eyes/worker-v3.4.1.js
 
 permissions:
   contents: read
