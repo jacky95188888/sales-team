@@ -15,7 +15,7 @@
 1. 在 GitHub 建立**此橋接專用的 OAuth App**，Callback 為 `https://ai-eyes-mcp.rhtm9y855y.workers.dev/callback`。
 2. 在 Cloudflare 為此獨立 Worker 建立 `OAUTH_KV`，將 namespace ID 寫進 `wrangler.jsonc`。
 3. 使用 Cloudflare Secrets 配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`COOKIE_ENCRYPTION_KEY`（隨機 32 bytes 以上）、`AI_EYES_ACCESS_TOKEN`（現有 AI Eyes 存取密碼）；不要放入 GitHub、聊天或程式碼。`ALLOWED_GITHUB_LOGIN` 保持為實際帳號。
-4. 執行 `npm ci`、`npm run type-check`、`npm run deploy`。部署時確認目標**只**是 `ai-eyes-mcp`，不要修改 `ai-eyes-video`。
+4. 執行 `npm install`、`npm run type-check`、`npm test`、`npm run deploy`。部署時確認目標**只**是 `ai-eyes-mcp`，不要修改 `ai-eyes-video`。
 5. 用 MCP Inspector 連 `https://ai-eyes-mcp.rhtm9y855y.workers.dev/mcp`，確認 OAuth、工具列表、未授權拒絕、背景任務與結果查詢。
 6. 在 ChatGPT 網頁版 Plugins → Add custom MCP server，輸入相同 `/mcp` URL，選 OAuth，完成 GitHub 登入並安裝個人外掛；之後在 Work 聊天以 `@AI Eyes` 呼叫。
 
