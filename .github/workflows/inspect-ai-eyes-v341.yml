@@ -46,4 +46,13 @@ jobs:
             else kind=other; fi
             echo "public_route=$route http=$public_status kind=$kind"
           done
-          rm -f cf-result.json cf-test-result.json public-response.txt
+          script_status=$(curl --silent --show-error --max-time 15 --output worker-source.txt --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video')
+          echo "worker_source_http=$script_status"
+          if [ "$script_status" = 200 ]; then
+            for marker in 'AI Eyes V3.3' 'AI Eyes V3.4.1' 'POST_ONLY' 'OpenAI' 'Interactions'; do
+              if grep -Fq "$marker" worker-source.txt; then echo "source_marker_$marker=present"; fi
+            done
+          fi
+          rm -f cf-result.json cf-test-result.json public-response.txt worker-source.txt
