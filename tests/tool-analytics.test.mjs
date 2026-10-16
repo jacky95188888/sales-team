@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {toolAnalytics,analyticsDay} from '../tool-analytics.js';
-function fixture(){const records=new Map();return {records,MONITOR:{put:async(k,v,o)=>{records.set(k,{name:k,metadata:o.metadata})},list:async({prefix,cursor})=>{const keys=[...records.values()].filter(k=>k.name.startsWith(prefix));const at=Number(cursor||0);return {keys:keys.slice(at,at+2),list_complete:at+2>=keys.length,cursor:String(at+2)}}}};}
+function fixture(){const records=new Map();return {records,MONITOR:{get:async k=>records.get(k)?.value||null,delete:async k=>records.delete(k),put:async(k,v,o)=>{records.set(k,{name:k,value:v,metadata:o.metadata})},list:async({prefix,cursor})=>{const keys=[...records.values()].filter(k=>k.name.startsWith(prefix));const at=Number(cursor||0);return {keys:keys.slice(at,at+2),list_complete:at+2>=keys.length,cursor:String(at+2)}}}};}
 const event=(overrides={})=>({tool:'dream-library',id:crypto.randomUUID(),page:'/dream-library/',...overrides});
 const track=b=>new Request('https://worker/tool-analytics/track',{method:'POST',headers:{Origin:'https://jacky95188888.github.io'},body:JSON.stringify(b)});
 const stats=()=>new Request('https://worker/tool-analytics/stats?tool=dream-library');
@@ -21,3 +21,5 @@ test('reject management pages, unknown tools, mismatched paths and cross-origin 
 test('method and payload validation',async()=>{const env=fixture();assert.equal((await toolAnalytics(new Request('https://worker/tool-analytics/track'),env)).status,405);assert.equal((await toolAnalytics(track(event({page:'/dream-library/'+ 'a'.repeat(2100)})),env)).status,413)});
 
 test('browser origin-only referrer is accepted',async()=>{const env=fixture(),r=track(event());r.headers.set('Referer','https://jacky95188888.github.io/');assert.equal((await toolAnalytics(r,env)).status,202);assert.equal(env.records.size,1)});
+
+test('storage health proves write, read and cleanup without a page view',async()=>{const env=fixture();const r=await toolAnalytics(new Request('https://worker/tool-analytics/health'),env);assert.equal(r.status,200);assert.equal((await r.json()).storage,'write_read_delete');assert.equal(env.records.size,0)});

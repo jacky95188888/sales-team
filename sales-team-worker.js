@@ -4,6 +4,7 @@ import { discoverThreadsTopics, draftThreadsPost, learnFromThreadsMetrics, norma
 const MODEL = "claude-sonnet-4-6",
   ORIGIN = "https://jacky95188888.github.io";
 const ROUTES = new Set([
+  "/tool-analytics/health",
   "/tool-analytics/track",
   "/tool-analytics/stats",
   "/",

@@ -9,6 +9,16 @@ export async function toolAnalytics(req, env) {
   const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
   if (!env.MONITOR) return reply({error:'ANALYTICS_NOT_CONFIGURED'},503);
   const url=new URL(req.url), tool=url.searchParams.get('tool');
+  if (url.pathname === '/tool-analytics/health') {
+    if (req.method !== 'GET') return reply({error:'GET_ONLY'},405);
+    const key='toolviews:health:'+crypto.randomUUID(),value='ok';
+    try {
+      await env.MONITOR.put(key,value,{expirationTtl:60});
+      const saved=await env.MONITOR.get(key);
+      await env.MONITOR.delete(key);
+      return reply({ok:saved===value,storage:saved===value?'write_read_delete':'read_mismatch'},saved===value?200:503);
+    } catch {return reply({ok:false,error:'STORAGE_UNAVAILABLE'},503)}
+  }
   if (url.pathname === '/tool-analytics/track') {
     if(req.method!=='POST') return reply({error:'POST_ONLY'},405);
     if(req.headers.get('Origin')!==origin) return reply({error:'ORIGIN_DENIED'},403);
