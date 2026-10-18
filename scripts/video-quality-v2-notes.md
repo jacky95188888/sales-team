@@ -1,0 +1,1 @@
+V2 先以獨立品質模組與測試落地，避免在未取得完整 Worker 原檔並完成回歸測試前直接覆寫 `sales-team-worker.js`。下一步接線只做小範圍、可回滾修改：director preflight -> video-create；render quality -> publish-video。

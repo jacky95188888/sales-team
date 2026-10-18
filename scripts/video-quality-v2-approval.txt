@@ -1,0 +1,1 @@
+motherVideoApproved=false by default; do not infer approval from render completion or automated score.

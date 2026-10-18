@@ -1,0 +1,1 @@
+Primary acceptance viewport is a phone: 9:16 where applicable, subtitles inside safe area, readable without zoom, no critical text under platform UI zones, visual changes meaningful rather than decorative.
