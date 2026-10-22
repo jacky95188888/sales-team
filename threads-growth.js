@@ -48,8 +48,19 @@ async function anthropic(env, system, user, max_tokens = 1200, web = false) {
     },
     body: JSON.stringify(body),
   });
-  const d = await r.json();
-  if (!r.ok) throw new Error(`Anthropic ${r.status}`);
+  const raw = await r.text();
+  let d = null;
+  try { d = JSON.parse(raw); } catch {}
+  if (!r.ok) {
+    const providerError = d?.error && typeof d.error === "object" ? d.error : {};
+    const type = clean(providerError.type || d?.type || "", 80).replace(/[\\r\\n\\t]+/g, " ");
+    const message = clean(providerError.message || d?.message || (d ? "" : raw), 240)
+      .replace(/[\\r\\n\\t]+/g, " ")
+      .replace(/\\bsk-ant-[A-Za-z0-9_-]+\\b/g, "[redacted-key]");
+    const detail = [type, message].filter(Boolean).join(": ");
+    throw new Error(`Anthropic ${r.status}${detail ? ` ${detail}` : ""}`);
+  }
+  if (!d) throw new Error(`Anthropic ${r.status} invalid_json_response`);
   return (d.content || []).filter((x) => x.type === "text").map((x) => x.text).join("\n").trim();
 }
 
