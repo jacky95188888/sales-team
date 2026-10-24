@@ -73,7 +73,9 @@ jobs:
                 status: .dailyResearch.status,
                 draftCount: .dailyResearch.draftCount,
                 lastUpdatedAt: .dailyResearch.lastUpdatedAt,
-                errorType: .dailyResearch.errorType
+                errorType: .dailyResearch.errorType,
+                providerErrorType: .dailyResearch.providerErrorType,
+                providerErrorCode: .dailyResearch.providerErrorCode
               }
             }' health.json
           else
