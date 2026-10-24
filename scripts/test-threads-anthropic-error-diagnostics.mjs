@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 // Load the exact Worker helper as ESM without changing repository module settings.
 const source = await readFile(new URL("../threads-growth.js", import.meta.url), "utf8");
-const { discoverThreadsTopics } = await import(
+const { discoverThreadsTopics, summarizeAnthropicError } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 const secret = "sk-ant-test-secret-value";
@@ -101,4 +101,22 @@ test("Anthropic errors retain safe diagnostic details without exposing credentia
       assert.equal(result.candidates[0].topic, "可核對題目");
     });
   });
+  await t.test("public health summary exposes only allowlisted provider metadata", async () => {
+    const details = summarizeAnthropicError(
+      "Anthropic 401 | type=authentication_error | code=invalid_api_key | message=Invalid API key: [REDACTED] | request_id=req_test_401",
+    );
+    assert.deepEqual(details, {
+      httpStatus: 401,
+      providerType: "authentication_error",
+      providerCode: "invalid_api_key",
+    });
+    assert.deepEqual(summarizeAnthropicError("Anthropic 401"), {
+      httpStatus: 401,
+      providerType: null,
+      providerCode: null,
+    });
+    assert.equal(Object.hasOwn(details, "message"), false);
+    assert.equal(Object.hasOwn(details, "requestId"), false);
+  });
+
 });
