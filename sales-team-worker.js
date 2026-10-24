@@ -1,5 +1,5 @@
 import { toolAnalytics } from "./tool-analytics.js";
-import { discoverThreadsTopics, draftThreadsPost, learnFromThreadsMetrics, normalizeThreadsConfig } from "./threads-growth.js";
+import { discoverThreadsTopics, draftThreadsPost, learnFromThreadsMetrics, normalizeThreadsConfig, summarizeAnthropicError } from "./threads-growth.js";
 
 const MODEL = "claude-sonnet-4-6",
   ORIGIN = "https://jacky95188888.github.io";
@@ -82,13 +82,16 @@ async function agentHealth(env) {
       const todayFailure = failure?.date === today ? failure : null;
       const error = String(todayFailure?.error || "");
       const errorType = /^Anthropic (\d{3})\b/.exec(error);
+      const providerError = summarizeAnthropicError(error);
       dailyResearch = {
         date: today,
         status: todayFailure ? "failed" : todayReport?.draftIds ? "waiting_review" : todayReport ? "researching" : "not_recorded",
         draftCount: todayReport?.draftIds?.length || 0,
         lastUpdatedAt: todayFailure?.at || todayReport?.updatedAt || todayReport?.createdAt || null,
-        // Public diagnostics expose only a category; never include API bodies, drafts or tokens.
-        errorType: todayFailure ? (errorType ? `anthropic_http_${errorType[1]}` : error === "NO_RESEARCH_CANDIDATES" ? "no_candidates" : "research_failed") : null
+        // Public diagnostics expose only allowlisted provider metadata, never messages, drafts or tokens.
+        errorType: todayFailure ? (errorType ? `anthropic_http_${errorType[1]}` : error === "NO_RESEARCH_CANDIDATES" ? "no_candidates" : "research_failed") : null,
+        providerErrorType: todayFailure ? providerError.providerType : null,
+        providerErrorCode: todayFailure ? providerError.providerCode : null
       };
     } catch {
       dailyResearch = { status: "diagnostics_unavailable" };
