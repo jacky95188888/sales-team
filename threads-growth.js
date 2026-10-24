@@ -56,6 +56,18 @@ function safeAnthropicError(response, rawBody, data, apiKey) {
     requestId ? `request_id=${requestId}` : "",
   ].filter(Boolean).join(" | ");
 }
+export function summarizeAnthropicError(value) {
+  const error = clean(value, 500);
+  const status = /^Anthropic (\\d{3})\\b/.exec(error)?.[1] || "";
+  const providerType = /\\|\\s*type=([a-zA-Z0-9_.-]{1,80})(?=\\s*\\||$)/.exec(error)?.[1] || null;
+  const providerCode = /\\|\\s*code=([a-zA-Z0-9_.-]{1,80})(?=\\s*\\||$)/.exec(error)?.[1] || null;
+  return {
+    httpStatus: status ? Number(status) : null,
+    providerType,
+    providerCode,
+  };
+}
+
 async function anthropic(env, system, user, max_tokens = 1200, web = false) {
   if (!env.ANTHROPIC_KEY) throw new Error("尚未設定 ANTHROPIC_KEY");
   const body = {
