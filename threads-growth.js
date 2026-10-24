@@ -34,15 +34,15 @@ function safeAnthropicError(response, rawBody, data, apiKey) {
   const detail = data?.error && typeof data.error === "object" ? data.error : {};
   const type = clean(detail.type || "", 80).replace(/[^a-zA-Z0-9_.-]/g, "");
   const code = clean(detail.code || "", 80).replace(/[^a-zA-Z0-9_.-]/g, "");
-  let message = clean(detail.message || data?.message || "", 800).replace(/[\\r\\n\\t]+/g, " ").replace(/\\s+/g, " ");
+  let message = clean(detail.message || data?.message || "", 800).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ");
   if (!message && !data && rawBody) {
-    message = String(rawBody).replace(/<[^>]*>/g, " ").replace(/[\\r\\n\\t]+/g, " ").replace(/\\s+/g, " ").trim();
+    message = String(rawBody).replace(/<[^>]*>/g, " ").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
   }
   if (apiKey) message = message.split(String(apiKey)).join("[REDACTED]");
   message = message
-    .replace(/\\b(x-api-key|authorization)\\s*[:=]\\s*[^\\s,;]+/gi, "$1=[REDACTED]")
-    .replace(/\\bBearer\\s+\\S+/gi, "Bearer [REDACTED]")
-    .replace(/\\bsk-ant-[A-Za-z0-9_-]{8,}\\b/g, "[REDACTED]")
+    .replace(/\b(x-api-key|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\bBearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/\bsk-ant-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]")
     .slice(0, 280);
   const requestId = clean(
     response.headers.get("request-id") || response.headers.get("anthropic-request-id") || data?.request_id || "",
@@ -56,7 +56,6 @@ function safeAnthropicError(response, rawBody, data, apiKey) {
     requestId ? `request_id=${requestId}` : "",
   ].filter(Boolean).join(" | ");
 }
-
 async function anthropic(env, system, user, max_tokens = 1200, web = false) {
   if (!env.ANTHROPIC_KEY) throw new Error("尚未設定 ANTHROPIC_KEY");
   const body = {
