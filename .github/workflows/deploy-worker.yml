@@ -7,6 +7,8 @@ on:
     paths:
       - tool-analytics.js
       - sales-team-worker.js
+      - threads-growth.js
+      - scripts/test-threads-anthropic-error-diagnostics.mjs
       - hq-patch.js
       - wrangler.jsonc
       - .github/workflows/deploy-worker.yml
@@ -39,6 +41,7 @@ jobs:
         run: |
           node --check sales-team-worker.js
           node scripts/check-worker.mjs
+          node scripts/test-threads-anthropic-error-diagnostics.mjs
 
       - name: Require protected credentials
         env:
