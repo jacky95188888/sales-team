@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - sales-team-worker.js
+      - threads-growth.js
+      - scripts/test-threads-anthropic-error-diagnostics.mjs
       - hq-patch.js
       - threads-approval-console.js
       - index.html
@@ -19,6 +21,8 @@ on:
       - video-quality-v3-clean
     paths:
       - sales-team-worker.js
+      - threads-growth.js
+      - scripts/test-threads-anthropic-error-diagnostics.mjs
       - hq-patch.js
       - threads-approval-console.js
       - index.html
@@ -44,6 +48,8 @@ jobs:
           node --check sales-team-worker.js
           node --check hq-patch.js
           node --check threads-approval-console.js
+      - name: Test safe Anthropic error diagnostics
+        run: node scripts/test-threads-anthropic-error-diagnostics.mjs
       - name: Check routes, bindings, schedule, and secrets
         run: |
           node scripts/check-worker.mjs
