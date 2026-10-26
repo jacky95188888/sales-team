@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - sales-team-worker.js
+      - threads-growth.js
+      - scripts/test-threads-anthropic-error-diagnostics.mjs
       - hq-patch.js
       - threads-approval-console.js
       - index.html
@@ -19,6 +21,8 @@ on:
       - video-quality-v3-clean
     paths:
       - sales-team-worker.js
+      - threads-growth.js
+      - scripts/test-threads-anthropic-error-diagnostics.mjs
       - hq-patch.js
       - threads-approval-console.js
       - index.html
@@ -44,6 +48,39 @@ jobs:
           node --check sales-team-worker.js
           node --check hq-patch.js
           node --check threads-approval-console.js
+      - name: Test safe Anthropic error diagnostics
+        run: node scripts/test-threads-anthropic-error-diagnostics.mjs
+      - name: Read public review-only diagnostics (no secrets)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if curl --silent --show-error --fail --max-time 15 \
+            'https://sales-team.rhtm9y855y.workers.dev/health/agent' --output health.json; then
+            jq -e '.ok == true and .service == "sales-team-agent"' health.json >/dev/null
+            jq -c '{
+              checkedAt,
+              monitor,
+              anthropicConfigured: .anthropic.configured,
+              threads: {
+                appConfigured: .threads.appConfigured,
+                redirectConfigured: .threads.redirectConfigured,
+                oauthConfigured: .threads.oauthConfigured,
+                livePublishEnabled: .threads.livePublishEnabled
+              },
+              approvalConfigured: .approval.configured,
+              dailyResearch: {
+                date: .dailyResearch.date,
+                status: .dailyResearch.status,
+                draftCount: .dailyResearch.draftCount,
+                lastUpdatedAt: .dailyResearch.lastUpdatedAt,
+                errorType: .dailyResearch.errorType,
+                providerErrorType: .dailyResearch.providerErrorType,
+                providerErrorCode: .dailyResearch.providerErrorCode
+              }
+            }' health.json
+          else
+            echo 'public_agent_health=unavailable'
+          fi
       - name: Check routes, bindings, schedule, and secrets
         run: |
           node scripts/check-worker.mjs
