@@ -140,7 +140,7 @@ export function summary(report) {
     ...report.blockers.map(x => `- ${x}`),
     '',
     '此工作只讀取健康摘要並處理已驗證的 AI 憑證；不修改 PIN、不觸發研究、不產片、不發布貼文。'
-  ].join('\\n');
+  ].join('\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
