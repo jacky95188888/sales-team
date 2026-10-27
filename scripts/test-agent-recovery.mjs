@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { recover, summary } from './agent-recovery.mjs';
 
-const health = { ok: true, service: 'sales-team-agent', anthropic: { configured: true }, threads: { oauthConfigured: false, livePublishEnabled: false }, dailyResearch: { errorType: 'anthropic_http_401' } };
-function mock({ valid = true, cloudflare = true, healthy = false, networkFail = false, encryptionSafe = true } = {}) {
+const health = { ok: true, service: 'sales-team-agent', anthropic: { configured: true }, threads: { oauthConfigured: false, livePublishEnabled: false }, dailyResearch: { date: '2026-10-27', status: 'failed', draftCount: 0, lastUpdatedAt: 1793070000000, errorType: 'anthropic_http_401', providerErrorType: 'authentication_error', providerErrorCode: 'invalid_api_key', providerErrorMessage: 'secret-do-not-log' } };
+function mock({ valid = true, cloudflare = true, healthy = false, networkFail = false, encryptionSafe = true, healthOverride = null } = {}) {
   const calls = [];
   const request = async (url, options) => {
     calls.push({ url, options });
     if (networkFail) throw new Error('failure including secret-do-not-log');
-    if (url.includes('/health/agent')) return Response.json(healthy ? { ...health, dailyResearch: {} } : health);
+    if (url.includes('/health/agent')) { const payload = healthOverride ? { ...health, ...healthOverride } : health; return Response.json(healthy ? { ...payload, dailyResearch: {} } : payload); }
     if (url.includes('api.anthropic.com')) return Response.json(valid ? { data: [{ id: 'model' }] } : { error: 'secret-do-not-log' }, { status: valid ? 200 : 401 });
     if (url.includes('api.cloudflare.com')) return options.method === 'PUT'
       ? Response.json({ success: cloudflare, errors: [{ message: 'secret-do-not-log' }] }, { status: cloudflare ? 200 : 403 })
@@ -19,6 +19,21 @@ function mock({ valid = true, cloudflare = true, healthy = false, networkFail = 
 const env = { ANTHROPIC_KEY: 'secret-do-not-log', CLOUDFLARE_API_TOKEN: 'cf-do-not-log', RECOVERY_APPLY: 'true' };
 let m = mock(), r = await recover({ env: {}, request: m.request });
 assert.equal(r.ai, 'authentication_failed'); assert.equal(m.calls.length, 1);
+assert.equal(r.research.status, 'failed');
+assert.equal(r.research.draftCount, 0);
+assert.equal(r.research.providerErrorType, 'authentication_error');
+assert.equal(r.research.providerErrorCode, 'invalid_api_key');
+assert.ok(summary(r).includes('invalid_api_key'));
+assert.ok(!summary(r).includes('secret-do-not-log'));
+
+m = mock({ healthOverride: { dailyResearch: { date: '2026-10-27', status: 'failed', draftCount: 0, lastUpdatedAt: 1793070000000, errorType: 'anthropic_http_429', providerErrorType: 'rate_limit_error', providerErrorCode: 'rate_limit_error', providerErrorMessage: 'secret-do-not-log' } } });
+r = await recover({ env, request: m.request });
+assert.equal(r.ai, 'configured_not_verified');
+assert.equal(r.action, 'none');
+assert.equal(r.research.errorType, 'anthropic_http_429');
+assert.ok(summary(r).includes('rate_limit_error'));
+assert.ok(!summary(r).includes('secret-do-not-log'));
+assert.equal(m.calls.length, 2); // health + Cloudflare metadata only; never rotates a key for non-401 failures.
 m = mock({ valid: false }); r = await recover({ env, request: m.request });
 assert.equal(r.ai, 'backup_rejected'); assert.equal(m.calls.length, 3);
 m = mock(); r = await recover({ env: { ...env, RECOVERY_APPLY: 'false' }, request: m.request });
