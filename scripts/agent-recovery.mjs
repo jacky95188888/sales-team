@@ -5,7 +5,11 @@ const ACCOUNT = '22bd6a71b50e9eeaa0daa802615a3459';
 
 // Fixed destinations only. Never print provider responses, headers or credentials.
 export async function recover({ env = process.env, request = fetch, now = new Date() } = {}) {
-  const report = { checkedAt: now.toISOString(), ai: 'unknown', threads: 'unknown', cloudflare: 'unknown', aiBindings: [], action: 'none', blockers: [] };
+  const report = {
+    checkedAt: now.toISOString(),
+    research: { date: null, status: 'unknown', draftCount: null, lastUpdatedAt: null, errorType: null, providerErrorType: null, providerErrorCode: null },
+    ai: 'unknown', threads: 'unknown', cloudflare: 'unknown', aiBindings: [], action: 'none', blockers: []
+  };
   const call = async (url, options = {}) => request(url, { ...options, signal: AbortSignal.timeout(20000) });
   let health;
   try {
@@ -13,6 +17,24 @@ export async function recover({ env = process.env, request = fetch, now = new Da
     if (!response.ok) throw new Error('health_unavailable');
     health = await response.json();
     if (health.service !== 'sales-team-agent' || health.ok !== true) throw new Error('health_invalid');
+
+    // Copy only bounded, non-secret readiness fields from the public read-only health endpoint.
+    const daily = health.dailyResearch && typeof health.dailyResearch === 'object' ? health.dailyResearch : {};
+    const date = String(daily.date ?? '');
+    const status = String(daily.status ?? '');
+    const errorType = String(daily.errorType ?? '');
+    const providerType = String(daily.providerErrorType ?? '');
+    const providerCode = String(daily.providerErrorCode ?? '');
+    const stamp = Number(daily.lastUpdatedAt);
+    report.research = {
+      date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
+      status: ['failed', 'waiting_review', 'researching', 'not_recorded', 'unavailable', 'diagnostics_unavailable'].includes(status) ? status : 'unknown',
+      draftCount: Number.isInteger(daily.draftCount) && daily.draftCount >= 0 && daily.draftCount <= 1000 ? daily.draftCount : null,
+      lastUpdatedAt: Number.isFinite(stamp) && stamp > 0 && stamp <= 8640000000000000 ? new Date(stamp).toISOString() : null,
+      errorType: /^(anthropic_http_[1-5]\d{2}|no_candidates|research_failed)$/.test(errorType) ? errorType : null,
+      providerErrorType: /^[A-Za-z0-9_.-]{1,80}$/.test(providerType) ? providerType : null,
+      providerErrorCode: /^[A-Za-z0-9_.-]{1,80}$/.test(providerCode) ? providerCode : null
+    };
   } catch {
     report.blockers.push('後端健康檢查無法確認；未更改任何設定。');
     return report;
@@ -21,7 +43,12 @@ export async function recover({ env = process.env, request = fetch, now = new Da
   if (!health.threads?.oauthConfigured) report.blockers.push('Threads 尚未保存官方授權，需要帳號本人完成官方連線。');
   if (!health.threads?.livePublishEnabled) report.blockers.push('Threads 正式發布開關關閉；本修復工作不會替你開啟。');
   report.ai = health.anthropic?.configured ? 'configured_not_verified' : 'missing';
-  const failed = health.dailyResearch?.errorType === 'anthropic_http_401';
+  const failed = report.research.errorType === 'anthropic_http_401';
+  if (report.research.status === 'failed' && !failed) {
+    report.blockers.push(`每日研究失敗（${report.research.errorType || '未分類'}）；本修復流程只對 HTTP 401 嘗試憑證修復，不猜測或覆蓋其他設定。`);
+  } else if (['not_recorded', 'unavailable', 'diagnostics_unavailable'].includes(report.research.status)) {
+    report.blockers.push('目前沒有可核對的今日研究紀錄；本修復流程不會手動觸發研究或發布。');
+  }
   const cfToken = String(env.CLOUDFLARE_API_TOKEN || '').trim();
   let secretNames = null;
   if (cfToken) {
@@ -95,7 +122,25 @@ export async function recover({ env = process.env, request = fetch, now = new Da
 }
 
 export function summary(report) {
-  return ['## 顧問團代理修復結果', '', `檢查時間：${report.checkedAt}`, `AI：${report.ai}`, `Cloudflare：${report.cloudflare}`, `已保存 AI 設定名稱：${report.aiBindings.join('、') || '未確認'}`, `Threads：${report.threads}`, `執行：${report.action}`, '', ...report.blockers.map(x => `- ${x}`), '', '此工作只處理 AI 憑證修復；不修改 PIN、不產片、不發布貼文。'].join('\n');
+  const research = report.research || {};
+  return [
+    '## 顧問團代理修復結果',
+    '',
+    `檢查時間：${report.checkedAt}`,
+    `每日研究：${research.status || 'unknown'}（日期：${research.date || '未提供'}；待審草稿：${research.draftCount ?? '未提供'} 篇）`,
+    `研究最後更新：${research.lastUpdatedAt || '未提供'}`,
+    `研究錯誤分類：${research.errorType || '無'}`,
+    `Anthropic 錯誤代碼（安全欄位）：type=${research.providerErrorType || '未提供'}；code=${research.providerErrorCode || '未提供'}`,
+    `AI：${report.ai}`,
+    `Cloudflare：${report.cloudflare}`,
+    `已保存 AI 設定名稱：${report.aiBindings.join('、') || '未確認'}`,
+    `Threads：${report.threads}`,
+    `執行：${report.action}`,
+    '',
+    ...report.blockers.map(x => `- ${x}`),
+    '',
+    '此工作只讀取健康摘要並處理已驗證的 AI 憑證；不修改 PIN、不觸發研究、不產片、不發布貼文。'
+  ].join('\\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -104,5 +149,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const text = summary(report);
   console.log(text);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text + '\n');
-  if (['authentication_failed', 'missing', 'backup_rejected', 'backup_auth_verified', 'unknown'].includes(report.ai) && report.action !== 'ready_to_sync' || ['sync_failed_or_unknown', 'encryption_dependency_blocked'].includes(report.action)) process.exitCode = 1;
+  const researchNeedsAttention = ['failed', 'not_recorded', 'unavailable', 'diagnostics_unavailable'].includes(report.research?.status);
+  if ((['authentication_failed', 'missing', 'backup_rejected', 'backup_auth_verified', 'unknown'].includes(report.ai) && report.action !== 'ready_to_sync') || ['sync_failed_or_unknown', 'encryption_dependency_blocked'].includes(report.action) || researchNeedsAttention) process.exitCode = 1;
 }
