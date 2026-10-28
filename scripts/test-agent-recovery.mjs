@@ -26,6 +26,11 @@ assert.equal(r.research.providerErrorCode, 'invalid_api_key');
 assert.ok(summary(r).includes('invalid_api_key'));
 assert.ok(!summary(r).includes('secret-do-not-log'));
 
+m = mock({ healthOverride: { dailyResearch: { date: '2026-10-27', status: 'failed', draftCount: 0, lastUpdatedAt: '2026-10-27T09:00:00.000Z', errorType: 'anthropic_http_401', providerErrorType: 'authentication_error', providerErrorCode: 'invalid_api_key' } } });
+r = await recover({ env: {}, request: m.request });
+assert.equal(r.research.lastUpdatedAt, '2026-10-27T09:00:00.000Z');
+assert.ok(summary(r).includes('2026-10-27T09:00:00.000Z'));
+
 m = mock({ healthOverride: { dailyResearch: { date: '2026-10-27', status: 'failed', draftCount: 0, lastUpdatedAt: 1793070000000, errorType: 'anthropic_http_429', providerErrorType: 'rate_limit_error', providerErrorCode: 'rate_limit_error', providerErrorMessage: 'secret-do-not-log' } } });
 r = await recover({ env, request: m.request });
 assert.equal(r.ai, 'configured_not_verified');
