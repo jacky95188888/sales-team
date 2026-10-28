@@ -25,7 +25,8 @@ export async function recover({ env = process.env, request = fetch, now = new Da
     const errorType = String(daily.errorType ?? '');
     const providerType = String(daily.providerErrorType ?? '');
     const providerCode = String(daily.providerErrorCode ?? '');
-    const stamp = Number(daily.lastUpdatedAt);
+    const rawStamp = daily.lastUpdatedAt;
+    const stamp = typeof rawStamp === 'number' ? rawStamp : typeof rawStamp === 'string' && /^\d{13}$/.test(rawStamp) ? Number(rawStamp) : typeof rawStamp === 'string' ? Date.parse(rawStamp) : NaN;
     report.research = {
       date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
       status: ['failed', 'waiting_review', 'researching', 'not_recorded', 'unavailable', 'diagnostics_unavailable'].includes(status) ? status : 'unknown',
