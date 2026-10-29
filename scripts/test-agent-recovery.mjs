@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { recover, summary } from './agent-recovery.mjs';
+
+// Regression guard: secret synchronization must require an explicit manual dispatch.
+const recoveryWorkflow = readFileSync(new URL('../.github/workflows/agent-recovery.yml', import.meta.url), 'utf8');
+assert.match(recoveryWorkflow, /RECOVERY_APPLY:\s*\$\{\{\s*github\.event_name\s*==\s*'workflow_dispatch'\s*&&\s*inputs\.apply\s*\}\}/);
+assert.doesNotMatch(recoveryWorkflow, /github\.event_name\s*==\s*'push'\s*\|\|/);
 
 const health = { ok: true, service: 'sales-team-agent', anthropic: { configured: true }, threads: { oauthConfigured: false, livePublishEnabled: false }, dailyResearch: { date: '2026-10-27', status: 'failed', draftCount: 0, lastUpdatedAt: 1793070000000, errorType: 'anthropic_http_401', providerErrorType: 'authentication_error', providerErrorCode: 'invalid_api_key', providerErrorMessage: 'secret-do-not-log' } };
 function mock({ valid = true, cloudflare = true, healthy = false, networkFail = false, encryptionSafe = true, healthOverride = null } = {}) {
