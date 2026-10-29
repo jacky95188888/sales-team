@@ -39,5 +39,5 @@ jobs:
           ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          RECOVERY_APPLY: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply) }}
+          RECOVERY_APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply }}
         run: node scripts/agent-recovery.mjs
