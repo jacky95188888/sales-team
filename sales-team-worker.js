@@ -80,6 +80,22 @@ async function agentHealth(env) {
       const today = taiwanDay();
       const todayReport = report?.date === today ? report : null;
       const todayFailure = failure?.date === today ? failure : null;
+      let autonomousPendingReviewCount = null;
+      try {
+        // Count only today's unattended drafts. This remains public/read-only
+        // and does not expose draft content or bypass the owner approval PIN.
+        const prefix = "threads:growth:draft:th_auto_" + today.replace(/-/g, "") + "_";
+        const draftPage = await env.MONITOR.list({ prefix, limit: 10 });
+        autonomousPendingReviewCount = 0;
+        for (const item of draftPage.keys || []) {
+          const draft = JSON.parse((await env.MONITOR.get(item.name)) || "null");
+          if (draft?.status === "pending_review" && taiwanDay(Number(draft.createdAt || 0)) === today) {
+            autonomousPendingReviewCount++;
+          }
+        }
+      } catch {
+        autonomousPendingReviewCount = null;
+      }
       const error = String(todayFailure?.error || "");
       const errorType = /^Anthropic (\d{3})\b/.exec(error);
       const providerError = summarizeAnthropicError(error);
@@ -87,6 +103,7 @@ async function agentHealth(env) {
         date: today,
         status: todayFailure ? "failed" : todayReport?.draftIds ? "waiting_review" : todayReport ? "researching" : "not_recorded",
         draftCount: todayReport?.draftIds?.length || 0,
+        autonomousPendingReviewCount,
         lastUpdatedAt: todayFailure?.at || todayReport?.updatedAt || todayReport?.createdAt || null,
         // Public diagnostics expose only allowlisted provider metadata, never messages, drafts or tokens.
         errorType: todayFailure ? (errorType ? `anthropic_http_${errorType[1]}` : error === "NO_RESEARCH_CANDIDATES" ? "no_candidates" : "research_failed") : null,
@@ -106,6 +123,7 @@ async function agentHealth(env) {
     threads: {
       appConfigured: Boolean(env.THREADS_APP_ID && env.THREADS_APP_SECRET),
       redirectConfigured: Boolean(env.THREADS_REDIRECT_URI),
+      redirectSource: env.THREADS_REDIRECT_URI ? "environment" : "worker_origin_fallback",
       // Presence only: an actual Threads API call is required to prove token validity.
       oauthConfigured: oauthCredentialsPresent,
       livePublishEnabled: threadsConfig.livePublishEnabled === true
