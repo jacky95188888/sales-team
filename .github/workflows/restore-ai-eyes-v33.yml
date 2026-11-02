@@ -1,0 +1,55 @@
+name: Restore AI Eyes V3.3 UI
+
+on:
+  push:
+    branches: [codex/ai-eyes-v341-test-deploy]
+    paths:
+      - .github/workflows/restore-ai-eyes-v33.yml
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Restore verified V3.3 version only if production still matches diagnosis
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api='https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/deployments'
+          expected='60644bfb-85a8-4282-8aeb-aca21d1a9d8c'
+          stable='db13267e-352b-4045-b890-7dbae70a9a4b'
+          current=$(curl -fsS --max-time 15 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" | jq -r '.result.deployments[0].versions[0].version_id')
+          echo "current_version=$current"
+          if [ "$current" = "$stable" ]; then
+            echo 'Already restored; no deployment needed.'
+            exit 0
+          fi
+          if [ "$current" != "$expected" ]; then
+            echo 'Production changed since diagnosis; refusing to overwrite a concurrent deployment.'
+            exit 1
+          fi
+          preview="https://db13267e-ai-eyes-video.rhtm9y855y.workers.dev"
+          curl -fsS --max-time 12 "$preview/" | grep -Fq 'AI Eyes V3.3'
+          curl -fsS --max-time 12 "$preview/health" | jq -e '.version == "AI Eyes V3.3" and .secrets.GEMINI_API_KEY == true and .secrets.ACCESS_TOKEN == true' >/dev/null
+          payload=$(jq -nc --arg id "$stable" '{strategy:"percentage",versions:[{version_id:$id,percentage:100}],annotations:{"workers/message":"Restore verified AI Eyes V3.3 mobile UI after POST_ONLY regression"}}')
+          http=$(curl -sS --max-time 20 -o restore-response.json -w '%{http_code}' -X POST "$api" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' --data "$payload")
+          echo "deployment_http=$http"
+          jq -c '{success, deployment: .result.id, versions: .result.versions, errors: [.errors[]? | {code,message}]}' restore-response.json
+          [ "$http" = 200 ] || exit 1
+          jq -e '.success == true' restore-response.json >/dev/null
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS --max-time 12 -o root-response.html -w '%{http_code}' 'https://ai-eyes-video.rhtm9y855y.workers.dev/')
+            if [ "$code" = 200 ] && grep -Fq 'AI Eyes V3.3' root-response.html; then
+              curl -fsS --max-time 12 'https://ai-eyes-video.rhtm9y855y.workers.dev/health' | jq -e '.version == "AI Eyes V3.3" and .secrets.GEMINI_API_KEY == true and .secrets.ACCESS_TOKEN == true' >/dev/null
+              echo 'production_ui=v33 health=ok'
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'Production verification failed after deployment.'
+          exit 1

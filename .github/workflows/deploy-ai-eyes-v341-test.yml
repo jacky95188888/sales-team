@@ -1,0 +1,58 @@
+name: Deploy AI Eyes V3.4.1 test Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type TEST to deploy only ai-eyes-video-v34-test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-eyes-v341-test
+  cancel-in-progress: false
+
+jobs:
+  deploy-test:
+    if: ${{ inputs.confirm == 'TEST' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check source and required credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ACCESS_TOKEN: ${{ secrets.AI_EYES_ACCESS_TOKEN }}
+        run: |
+          test -s ai-eyes/worker-v3.4.1.js
+          grep -Fq 'AI Eyes V3.4.1' ai-eyes/worker-v3.4.1.js
+          node --check ai-eyes/worker-v3.4.1.js
+          node ai-eyes/test-worker.mjs
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$GEMINI_API_KEY"
+          test -n "$ACCESS_TOKEN"
+      - name: Deploy isolated test Worker and sync its secrets
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 22bd6a71b50e9eeaa0daa802615a3459
+          wranglerVersion: "4"
+          command: deploy --config ai-eyes/wrangler.test.jsonc
+          secrets: |
+            GEMINI_API_KEY
+            ACCESS_TOKEN
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ACCESS_TOKEN: ${{ secrets.AI_EYES_ACCESS_TOKEN }}
+      - name: Check test Worker health without creating a paid job
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            https://ai-eyes-video-v34-test.rhtm9y855y.workers.dev/health \
+            | jq -e '.ok == true and (.version | startswith("AI Eyes V3.4.1")) and .secrets.GEMINI_API_KEY == true and .secrets.ACCESS_TOKEN == true' >/dev/null

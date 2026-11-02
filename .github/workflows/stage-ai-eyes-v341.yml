@@ -1,0 +1,53 @@
+name: Stage isolated AI Eyes V3.4.1 candidate
+
+on:
+  push:
+    branches: [codex/ai-eyes-v341-test-deploy]
+    paths:
+      - .github/workflows/stage-ai-eyes-v341.yml
+      - ai-eyes/wrangler.test.jsonc
+      - ai-eyes/worker-v3.4.1.js
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-eyes-v341-test
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate candidate and production guard
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          node --check ai-eyes/worker-v3.4.1.js
+          node ai-eyes/test-worker.mjs
+          current=$(curl -fsS --max-time 15 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" 'https://api.cloudflare.com/client/v4/accounts/22bd6a71b50e9eeaa0daa802615a3459/workers/scripts/ai-eyes-video/deployments' | jq -r '.result.deployments[0].versions[0].version_id')
+          echo "production_version=$current"
+          [ "$current" = 'db13267e-352b-4045-b890-7dbae70a9a4b' ]
+      - name: Deploy code to separate test Worker without copying production secrets
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 22bd6a71b50e9eeaa0daa802615a3459
+          wranglerVersion: '4'
+          command: deploy --config ai-eyes/wrangler.test.jsonc
+      - name: Check isolated UI and explicit unconfigured state
+        run: |
+          set -euo pipefail
+          url='https://ai-eyes-video-v34-test.rhtm9y855y.workers.dev'
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$url/" | grep -Fq 'AI Eyes V3.4.1'
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$url/health" | jq -e '.ok == true and (.version | startswith("AI Eyes V3.4.1"))' >/dev/null
+          echo 'test_ui=ok'
+          curl -fsS --max-time 15 'https://ai-eyes-video.rhtm9y855y.workers.dev/health' | jq -e '.version == "AI Eyes V3.3" and .secrets.GEMINI_API_KEY == true and .secrets.ACCESS_TOKEN == true' >/dev/null
+          echo 'production_ui=v33'
