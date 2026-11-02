@@ -1,0 +1,1 @@
+spec-locked=true; next changes should integrate or test, not expand requirements without evidence from mother-video results.

@@ -1,0 +1,11 @@
+NEXT:
+1 fetch full worker safely
+2 wire director plan generation before createVideoForRecord
+3 persist directorPlan on task/job
+4 preflightDirectorPlan before HeyGen call
+5 completed -> quality_review, never directly publish
+6 wire quality report and regeneration
+7 publish-video requires publish_queue
+8 run regression tests
+9 generate one mother video
+10 manual acceptance then merge

@@ -1,0 +1,9 @@
+[ ] director plan wired before render
+[ ] preflight blocks invalid plans
+[ ] rendered video receives quality report
+[ ] score < 80 regenerates
+[ ] hard failure regenerates regardless of score
+[ ] publish endpoint blocks non-publish_queue jobs
+[ ] mother video manually approved
+[ ] regression tests pass
+[ ] only then merge to main
