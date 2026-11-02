@@ -1,0 +1,27 @@
+{
+	"name": "ai-eyes-mcp",
+	"version": "0.0.1",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"cf-typegen": "wrangler types",
+		"type-check": "tsc --noEmit",
+		"test": "node --test ai-eyes-api.test.mjs"
+	},
+	"dependencies": {
+		"@cloudflare/workers-oauth-provider": "^0.8.1",
+		"agents": "^0.17.1",
+		"hono": "^4.12.27",
+		"just-pick": "^4.2.0",
+		"octokit": "^5.0.5",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^5.20261006.1",
+		"typescript": "6.0.3",
+		"wrangler": "^4.105.0"
+	}
+}
