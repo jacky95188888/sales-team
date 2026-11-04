@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { countAutonomousPendingReview } from "../sales-team-worker.js";
 
 const worker = readFileSync(new URL("../sales-team-worker.js", import.meta.url), "utf8");
 const hq = readFileSync(new URL("../hq-patch.js", import.meta.url), "utf8");
@@ -174,6 +175,9 @@ assert.match(worker, /autonomous_daily_research/);
 assert.match(worker, /const config = \{ \.\.\.storedConfig, mode: "review", livePublishEnabled: false \}/);
 assert.doesNotMatch(worker.slice(worker.indexOf("async function threadsAutonomousResearch"), worker.indexOf("async function hqProcessAutoPublish")), /autoFinalizeThreadsDraft\(/);
 assert.match(worker, /dailyResearch/);
+assert.match(worker, /autonomousPendingReviewCount/);
+assert.match(worker, /threads:growth:draft:th_auto_/);
+assert.match(worker, /redirectSource: env\.THREADS_REDIRECT_URI \? "environment" : "worker_origin_fallback"/);
 assert.match(worker, /\/health\/agent/);
 assert.match(worker, /async function agentHealth/);
 assert.match(worker, /anthropic: \{ configured: Boolean\(env\.ANTHROPIC_KEY\) \}/);
@@ -277,3 +281,31 @@ assert.match(worker, /"views,likes,replies,reposts"/);
 assert.match(worker, /threads:growth:insights-sync:latest/);
 assert.match(worker, /threadsSyncOfficialInsights\(env, e\)/);
 assert.match(approvalConsole, /最近成效同步/);
+
+// Exercise the public review-count helper against a mock MONITOR KV.
+const reviewDate = "2026-11-04";
+const reviewPrefix = "threads:growth:draft:th_auto_20261104_";
+const todayCreatedAt = Date.parse("2026-11-04T09:00:00+08:00");
+const yesterdayCreatedAt = Date.parse("2026-11-03T09:00:00+08:00");
+const reviewRecords = new Map([
+  [reviewPrefix + "1_a1b2c3", JSON.stringify({ status: "pending_review", createdAt: todayCreatedAt })],
+  [reviewPrefix + "2_d4e5f6", JSON.stringify({ status: "approved", createdAt: todayCreatedAt })],
+  [reviewPrefix + "3_g7h8i9", JSON.stringify({ status: "pending_review", createdAt: yesterdayCreatedAt })],
+  ["threads:growth:draft:manual_1", JSON.stringify({ status: "pending_review", createdAt: todayCreatedAt })],
+]);
+const mockMonitor = {
+  async list({ prefix, limit }) {
+    assert.equal(prefix, reviewPrefix);
+    assert.equal(limit, 10);
+    return { keys: [...reviewRecords.keys()].filter((key) => key.startsWith(prefix)).map((name) => ({ name })) };
+  },
+  async get(key) {
+    return reviewRecords.get(key) ?? null;
+  },
+};
+assert.equal(await countAutonomousPendingReview({ MONITOR: mockMonitor }, reviewDate), 1);
+assert.equal(await countAutonomousPendingReview({ MONITOR: { async list() { throw new Error("KV_LIST_FAILED"); } } }, reviewDate), null);
+assert.equal(await countAutonomousPendingReview({ MONITOR: { async list() { return { keys: [{ name: reviewPrefix + "bad" }] }; }, async get() { return "{"; } } }, reviewDate), null);
+assert.equal(await countAutonomousPendingReview({ MONITOR: { async list() { return { keys: [{ name: reviewPrefix + "1" }] }; }, async get() { throw new Error("KV_GET_FAILED"); } } }, reviewDate), null);
+assert.equal(await countAutonomousPendingReview({ MONITOR: mockMonitor }, "invalid-date"), null);
+console.log("Public review-count mock KV checks passed (5 scenarios).");
