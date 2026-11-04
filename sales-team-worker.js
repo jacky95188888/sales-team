@@ -63,7 +63,7 @@ const ROUTES = new Set([
   "/publish-status",
 ]);
 export async function countAutonomousPendingReview(env, today) {
-  if (!env?.MONITOR || !/\d{4}-\d{2}-\d{2}$/.test(String(today || ""))) return null;
+  if (!env?.MONITOR || !/^\d{4}-\d{2}-\d{2}$/.test(String(today || ""))) return null;
   try {
     // Only count today's unattended Threads drafts; never return draft content.
     const prefix = "threads:growth:draft:th_auto_" + today.replace(/-/g, "") + "_";
