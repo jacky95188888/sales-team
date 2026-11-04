@@ -62,6 +62,24 @@ const ROUTES = new Set([
   "/publish-video",
   "/publish-status",
 ]);
+export async function countAutonomousPendingReview(env, today) {
+  if (!env?.MONITOR || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(today || ""))) return null;
+  try {
+    // Only count today's unattended Threads drafts; never return draft content.
+    const prefix = "threads:growth:draft:th_auto_" + today.replace(/-/g, "") + "_";
+    const draftPage = await env.MONITOR.list({ prefix, limit: 10 });
+    let count = 0;
+    for (const item of draftPage.keys || []) {
+      const draft = JSON.parse((await env.MONITOR.get(item.name)) || "null");
+      if (draft?.status === "pending_review" && taiwanDay(Number(draft.createdAt || 0)) === today) count++;
+    }
+    return count;
+  } catch {
+    // A partial or malformed KV read must not be reported as a trustworthy count.
+    return null;
+  }
+}
+
 async function agentHealth(env) {
   let threadsConfig = {};
   let dailyResearch = { status: "unavailable" };
@@ -80,22 +98,7 @@ async function agentHealth(env) {
       const today = taiwanDay();
       const todayReport = report?.date === today ? report : null;
       const todayFailure = failure?.date === today ? failure : null;
-      let autonomousPendingReviewCount = null;
-      try {
-        // Count only today's unattended drafts. This remains public/read-only
-        // and does not expose draft content or bypass the owner approval PIN.
-        const prefix = "threads:growth:draft:th_auto_" + today.replace(/-/g, "") + "_";
-        const draftPage = await env.MONITOR.list({ prefix, limit: 10 });
-        autonomousPendingReviewCount = 0;
-        for (const item of draftPage.keys || []) {
-          const draft = JSON.parse((await env.MONITOR.get(item.name)) || "null");
-          if (draft?.status === "pending_review" && taiwanDay(Number(draft.createdAt || 0)) === today) {
-            autonomousPendingReviewCount++;
-          }
-        }
-      } catch {
-        autonomousPendingReviewCount = null;
-      }
+      const autonomousPendingReviewCount = await countAutonomousPendingReview(env, today);
       const error = String(todayFailure?.error || "");
       const errorType = /^Anthropic (\d{3})\b/.exec(error);
       const providerError = summarizeAnthropicError(error);
