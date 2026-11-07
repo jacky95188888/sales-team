@@ -116,6 +116,31 @@ export async function discoverThreadsTopics(env, body = {}) {
   return parseJson(out, { candidates: [], raw: out });
 }
 
+export function validateThreadsDraft(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("THREADS_DRAFT_INVALID_JSON");
+  }
+  const hooks = Array.isArray(value.hooks)
+    ? value.hooks.map((hook) => typeof hook === "string" ? hook.trim() : "")
+    : [];
+  const normalizedHooks = hooks.map((hook) => hook.replace(/\s+/g, " ").toLowerCase());
+  if (
+    hooks.length !== 3 ||
+    hooks.some((hook) => !hook || hook.length > 500) ||
+    new Set(normalizedHooks).size !== 3
+  ) {
+    throw new Error("THREADS_DRAFT_INVALID_HOOKS");
+  }
+  if (!Number.isInteger(value.selected) || value.selected < 0 || value.selected >= 3) {
+    throw new Error("THREADS_DRAFT_INVALID_SELECTION");
+  }
+  const post = typeof value.post === "string" ? value.post.trim() : "";
+  if (!post || post.length > 5000) {
+    throw new Error("THREADS_DRAFT_INVALID_POST");
+  }
+  return { ...value, hooks, post };
+}
+
 export async function draftThreadsPost(env, body = {}) {
   const topic = clean(body.topic, 300);
   if (!topic) throw new Error("TOPIC_REQUIRED");
@@ -127,7 +152,7 @@ export async function draftThreadsPost(env, body = {}) {
     `題目：${topic}\n補充資料：${clean(body.context, 5000)}\n近期文章摘要：${JSON.stringify(history)}\n歷史學習：${JSON.stringify(learned)}\n先想 3 個真正不同的開頭，再選最適合的一個完成文章。只回 JSON：{"hooks":["","",""] ,"selected":0,"reason":"","post":"","topicTag":"","hookType":""}。文章適合 Threads 閱讀，不要解釋生成過程。`,
     1600,
   );
-  return parseJson(out, { hooks: [], selected: 0, reason: "解析失敗", post: out });
+  return validateThreadsDraft(parseJson(out, null));
 }
 
 export function learnFromThreadsMetrics(rows = []) {
