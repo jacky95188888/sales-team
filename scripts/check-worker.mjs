@@ -203,6 +203,19 @@ assert.match(approvalConsole, /內容策略/);
 assert.match(approvalConsole, /風險檢查/);
 
 assert.match(worker, /Math\.min\(3, writable\.length\)/);
+const autonomousResearch = worker.slice(
+  worker.indexOf("async function threadsAutonomousResearch"),
+  worker.indexOf("async function hqProcessAutoPublish"),
+);
+assert.match(autonomousResearch, /const draftRecords = \[\]/);
+assert.match(autonomousResearch, /for \(const item of draftRecords\)/);
+assert.match(autonomousResearch, /savedDraftKeys\.push\(item\.key\)/);
+assert.match(autonomousResearch, /for \(const key of savedDraftKeys\)/);
+assert.match(autonomousResearch, /report\.draftIds = \[\]/);
+assert.ok(
+  autonomousResearch.indexOf("await draftThreadsPost") < autonomousResearch.indexOf("await env.MONITOR.put(item.key"),
+  "All AI drafts must validate before any draft KV write",
+);
 assert.match(worker, /NO_RESEARCH_CANDIDATES/);
 assert.match(worker, /latestResearchError/);
 assert.match(approvalConsole, /最近研究失敗/);
