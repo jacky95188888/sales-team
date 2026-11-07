@@ -89,4 +89,4 @@ await withMockFetch(async () => new Response(JSON.stringify({
   );
 });
 
-console.log("Threads draft schema validation passed (11 assertions plus 3 mocked API paths).");
+console.log("Threads draft schema validation passed.");
