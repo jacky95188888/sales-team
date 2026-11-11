@@ -9,6 +9,7 @@ on:
       - scripts/test-agent-recovery.mjs
       - scripts/test-threads-anthropic-error-diagnostics.mjs
       - scripts/test-threads-draft-validation.mjs
+      - scripts/test-threads-autonomous-research-kv.mjs
       - hq-patch.js
       - threads-approval-console.js
       - index.html
@@ -58,6 +59,8 @@ jobs:
         run: node scripts/test-threads-anthropic-error-diagnostics.mjs
       - name: Test Threads draft schema validation
         run: node scripts/test-threads-draft-validation.mjs
+      - name: Test Threads autonomous research KV rollback
+        run: node scripts/test-threads-autonomous-research-kv.mjs
       - name: Test bounded Agent Connection Recovery diagnostics
         run: node scripts/test-agent-recovery.mjs
       - name: Read public review-only diagnostics (no secrets)
