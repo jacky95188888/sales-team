@@ -2473,6 +2473,8 @@ async function threadsAutonomousResearch(env, event) {
   const today = taiwanDay();
   const marker = "threads:growth:auto-research:" + today;
   if (await env.MONITOR.get(marker)) return { status: "already_completed", date: today };
+  const savedDraftKeys = [];
+  let report = null;
   try {
     const storedConfig = normalizeThreadsConfig(JSON.parse((await env.MONITOR.get("threads:growth:config")) || "{}"));
     // The unattended cron is always review-only, even if an older setting selected auto.
@@ -2486,7 +2488,7 @@ async function threadsAutonomousResearch(env, event) {
       .sort((a, b) => Number(a.priority || 99) - Number(b.priority || 99))
       .slice(0, 6);
     if (!candidates.length) throw new Error("NO_RESEARCH_CANDIDATES");
-    const report = {
+    report = {
       id: "research_" + today.replace(/-/g, ""),
       date: today,
       status: "researched_waiting_review",
@@ -2500,6 +2502,7 @@ async function threadsAutonomousResearch(env, event) {
     // Candidate drafts are separate from the daily publishing limit.
     const count = Math.min(3, writable.length);
     const drafts = [];
+    const draftRecords = [];
     for (let i = 0; i < count; i++) {
       const c = writable[i];
       const context = [
@@ -2511,8 +2514,10 @@ async function threadsAutonomousResearch(env, event) {
         c.discussion?.strategist ? "內容策略顧問：" + c.discussion.strategist : "",
         c.discussion?.riskReviewer ? "風險顧問：" + c.discussion.riskReviewer : ""
       ].filter(Boolean).join("\n");
+      // Validate every AI response before writing any draft to KV.
       const draft = await draftThreadsPost(env, { topic: c.topic, context, history, learned });
       const id = "th_auto_" + today.replace(/-/g, "") + "_" + (i + 1) + "_" + crypto.randomUUID().slice(0, 6);
+      const key = "threads:growth:draft:" + id;
       const record = {
         id,
         status: "pending_review",
@@ -2524,8 +2529,13 @@ async function threadsAutonomousResearch(env, event) {
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
-      await env.MONITOR.put("threads:growth:draft:" + id, JSON.stringify(record), { expirationTtl: 2592000 });
+      draftRecords.push({ key, record });
       drafts.push(id);
+    }
+    // Stage all generated drafts first; only persist after every draft passes validation.
+    for (const item of draftRecords) {
+      await env.MONITOR.put(item.key, JSON.stringify(item.record), { expirationTtl: 2592000 });
+      savedDraftKeys.push(item.key);
     }
     report.draftIds = drafts;
     report.mode = config.mode;
@@ -2537,12 +2547,24 @@ async function threadsAutonomousResearch(env, event) {
     await env.MONITOR.delete("threads:growth:auto-research-error");
     return { status: "completed", date: today, draftCount: drafts.length };
   } catch (error) {
+    // Roll back any partial KV writes so failed runs cannot leave orphaned pending drafts.
+    for (const key of savedDraftKeys) {
+      try { await env.MONITOR.delete(key); } catch {}
+    }
+    if (report) {
+      report.status = "failed";
+      report.draftIds = [];
+      report.updatedAt = Date.now();
+      try {
+        await env.MONITOR.put("threads:growth:research:latest", JSON.stringify(report));
+        await env.MONITOR.put("threads:growth:research:" + today, JSON.stringify(report), { expirationTtl: 2592000 });
+      } catch {}
+    }
     const detail = { at: Date.now(), date: today, error: String(error?.message || error).slice(0, 500) };
     await env.MONITOR.put("threads:growth:auto-research-error", JSON.stringify(detail), { expirationTtl: 604800 });
     return { status: "failed", ...detail };
   }
 }
-
 async function hqProcessAutoPublish(env) {
   if (!env.MONITOR) return;
   const workspaceIds = JSON.parse((await env.MONITOR.get("hq:workspaces")) || "[]").slice(-20);
